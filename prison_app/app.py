@@ -1,4 +1,3 @@
-# app.py
 import streamlit as st
 import pandas as pd
 import joblib
@@ -6,7 +5,7 @@ from pathlib import Path
 
 st.set_page_config(page_title="Recidivism Tahmin", layout="centered")
 
-BASE_DIR = Path(__file__).parent  # app.py dosyasının bulunduğu klasör
+BASE_DIR = Path(__file__).parent
 
 MODEL_FILE = BASE_DIR / "catboost_model.pkl"
 BOOL_FILE = BASE_DIR / "bool_columns.pkl"
@@ -36,23 +35,25 @@ if art is None:
 
 model, bool_cols, cat_features, feature_names = art
 
-st.title("📊 Recidivism (3 yıl) Tahmin Uygulaması")
-st.write("Alanları doldurup tahmin yapın. Boolean sütunlar `True/False` string olarak modele verildi.")
+st.markdown("<h1 style='text-align: center; color: #4B8BBE;'>📊 Recidivism (3 Yıl) Tahmin Uygulaması</h1>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; font-size:16px;'>Lütfen aşağıdaki alanları doldurun ve tahmin yap butonuna tıklayın.</p>", unsafe_allow_html=True)
 
-# Input form
-st.subheader("Girdi Alanları")
+st.write("---")
+
 input_data = {}
 cols = st.columns(2)
 for i, col in enumerate(feature_names):
     container = cols[i % 2]
     with container:
         if col in bool_cols:
-            v = st.selectbox(col, ["True", "False"])
+            v = st.selectbox(f"{col} (True/False)", ["True", "False"])
         elif col in cat_features:
-            v = st.text_input(col, value="")
+            v = st.text_input(f"{col} (Kategori)", value="")
         else:
-            v = st.number_input(col, value=0.0, format="%.6f")
+            v = st.number_input(f"{col} (Sayı)", value=0.0, format="%.6f")
         input_data[col] = v
+
+st.write("---")
 
 if st.button("🔮 Tahmin Yap"):
     try:
@@ -65,8 +66,8 @@ if st.button("🔮 Tahmin Yap"):
         pred = model.predict(df_input)[0]
         proba = model.predict_proba(df_input)[0][1] if hasattr(model, "predict_proba") else None
 
-        st.success(f"Tahmin: {'Yüksek risk (1)' if int(pred) == 1 else 'Düşük risk (0)'}")
+        st.success(f"### Tahmin: {'Yüksek risk (1)' if int(pred) == 1 else 'Düşük risk (0)'}")
         if proba is not None:
-            st.write(f"Olasılık: **{proba*100:.2f}%**")
+            st.info(f"Olasılık: **{proba*100:.2f}%**")
     except Exception as e:
         st.error("Tahmin sırasında hata: " + str(e))
