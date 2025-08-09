@@ -1,5 +1,9 @@
 streamlit
 pandas
-scikit-learn
-catboost
 joblib
+catboost
+scikit-learn
+plotly
+shap
+matplotlib
+seaborn
