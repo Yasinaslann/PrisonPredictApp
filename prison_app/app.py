@@ -1,13 +1,8 @@
-# prison_app/app.py
 import streamlit as st
 import pandas as pd
 from pathlib import Path
-from datetime import datetime
 import plotly.express as px
 
-# -------------------------
-# Sayfa genel yapılandırması
-# -------------------------
 st.set_page_config(
     page_title="Yeniden Suç İşleme Tahmin Uygulaması",
     page_icon="⚖️",
@@ -23,14 +18,14 @@ CANDIDATE_PATHS = [
 APP_VERSION = "v1.0 (Ana Sayfa)"
 
 @st.cache_data(show_spinner=False)
-def load_data() -> pd.DataFrame | None:
+def load_data():
     for p in CANDIDATE_PATHS:
         try:
             if p.exists():
                 df = pd.read_csv(p)
                 return df
-        except Exception as e:
-            st.warning(f"Veri yüklenirken hata oluştu: {e}")
+        except:
+            continue
     return None
 
 def convert_sentence_length(val):
@@ -51,160 +46,88 @@ def convert_sentence_length(val):
         except:
             return None
 
-def create_demo_data() -> pd.DataFrame:
+def create_demo_data():
     demo = pd.DataFrame({
-        "Prison_Offense": ["hırsızlık", "dolandırıcılık", "yaralama", "hırsızlık", "uyuşturucu", "dolandırıcılık", "dolandırıcılık"],
-        "Prison_Years": ["0.5", "1", "2", "0.25", "1.5", "0.75", "0.5"],
-        "Education_Level": ["lise", "ilkokul", "lise", "lise", "üniversite", "lise", "ilkokul"],
-        "Num_Distinct_Arrest_Crime_Types": [0, 2, 1, 0, 3, 1, 2],
-        "Recidivism_Within_3years": [0, 1, 0, 0, 1, 0, 1]
+        "Prison_Offense": ["hırsızlık", "dolandırıcılık", "yaralama", "hırsızlık", "uyuşturucu", "dolandırıcılık"],
+        "Prison_Years": ["Less than 1 year", "1-2 years", "More than 3 years", "1-2 years", "Less than 1 year", "More than 3 years"],
+        "Num_Distinct_Arrest_Crime_Types": [0, 2, 1, 0, 3, 1],
+        "Recidivism_Within_3years": [0, 1, 0, 0, 1, 0]
     })
     return demo
 
-def show_basic_stats(df: pd.DataFrame):
-    st.subheader("📊 Veri Seti Temel İstatistikler")
-
-    col1, col2, col3, col4 = st.columns(4)
-    try:
-        total_records = df.shape[0]
-        unique_crimes = df["suç_tipi"].nunique() if "suç_tipi" in df.columns else None
-        avg_sentence = df["ceza_yil_sayisal"].mean() if "ceza_yil_sayisal" in df.columns else None
-
-        recid_col_candidates = [c for c in df.columns if "recid" in c.lower()]
-        recid_rate = None
-        if recid_col_candidates:
-            recid_col = recid_col_candidates[0]
-            recid_rate = df[recid_col].dropna().astype(float).mean()
-
-        col1.metric("🗂️ Toplam Kayıt", total_records)
-        if unique_crimes is not None:
-            col2.metric("📌 Farklı Suç Tipi", unique_crimes)
-        else:
-            col2.markdown("📌 Farklı Suç Tipi\n**Veri yok**")
-
-        if avg_sentence is not None and not pd.isna(avg_sentence):
-            col3.metric("⏳ Ortalama Ceza Süresi (yıl)", round(avg_sentence, 2))
-        else:
-            col3.markdown("⏳ Ortalama Ceza Süresi (yıl)\n**Veri yok**")
-
-        if recid_rate is not None and not pd.isna(recid_rate):
-            col4.metric("⚠️ Yeniden Suç İşleme Oranı", f"{recid_rate:.2%}")
-        else:
-            col4.markdown("⚠️ Yeniden Suç İşleme Oranı\n**Veri yok**")
-
-    except Exception as e:
-        st.error(f"İstatistikler hesaplanırken hata oluştu: {e}")
-
-def plot_category_distribution(df: pd.DataFrame, col_name: str, title: str):
-    counts = df[col_name].value_counts().reset_index()
-    counts.columns = [col_name, "Sayısı"]
-    fig = px.bar(counts, x=col_name, y="Sayısı", title=title)
-    st.plotly_chart(fig, use_container_width=True)
-
-def plot_histogram(df: pd.DataFrame, col_name: str, title: str):
-    fig = px.histogram(df, x=col_name, nbins=20, title=title)
-    st.plotly_chart(fig, use_container_width=True)
-
-def home_page():
+def main():
     st.title("🏛️ Yeniden Suç İşleme Tahmin Uygulaması")
-    
-    st.markdown(
-        """
-        ## Projenin Amacı ve Hikayesi
 
-        Modern toplumlarda suç ve ceza kavramları, bireylerin ve toplumların güvenliği için büyük önem taşır.  
-        Ancak hapishaneden tahliye edilen mahpusların, topluma tekrar suç işleyerek dönme riski (recidivism) önemli bir sosyal sorundur.  
+    st.markdown("""
+    ## Proje Amacı
 
-        Bu proje, mahpusların tahliye sonrası yeniden suç işleme olasılıklarını **veri bilimi ve makine öğrenmesi teknikleri** ile analiz etmeyi ve tahmin etmeyi hedefler.  
-        Amaç, bu riskleri önceden belirleyerek, rehabilitasyon süreçlerini geliştirmek ve toplumsal yeniden entegrasyon süreçlerine katkı sağlamaktır.
+    Bu uygulama, mahpusların tahliye sonrası yeniden suç işleme riskini veri bilimi ve makine öğrenmesi ile tahmin etmeyi amaçlar.
 
-        ## Veri Seti Hakkında
+    ## Veri Seti Hakkında
 
-        Kullanılan veri seti, Türkiye’deki mahpusların çeşitli demografik, suç geçmişi ve ceza bilgilerini içermektedir.  
-        Veri setinde yer alan bazı temel değişkenler şunlardır:  
+    Veri setinde mahpusların suç tipleri, ceza süreleri, geçmiş suç sayıları ve yeniden suç işleme bilgileri yer almaktadır.
 
-        - **Prison_Offense:** Mahpusların işlediği suçların kategorileri  
-        - **Prison_Years:** Hapis cezasının uzunluğu (bazı kategorik ifadeler sayısala çevrildi)  
-        - **Education_Level:** Mahpusların eğitim seviyeleri  
-        - **Num_Distinct_Arrest_Crime_Types:** Daha önce işlenen farklı suç türlerinin sayısı  
-        - **Recidivism_Within_3years:** Tahliye sonrası 3 yıl içinde yeniden suç işleyip işlemediği (1=Evet, 0=Hayır)  
+    """)
 
-        Veri seti, bu tür değişkenler üzerinden modelleme ve analizlere imkan verir.  
-        Elinizde `Prisongüncelveriseti.csv` dosyası yoksa, demo veri seti kullanılacaktır.
-        """
-    )
-
-    st.markdown("---")
-
+    df = load_data()
     if df is None:
-        st.warning(
-            """
-            **Veri seti bulunamadı veya yüklenemedi.**  
-            `Prisongüncelveriseti.csv` dosyasını proje dizinine ekleyerek gerçek verilerle çalışabilirsiniz.  
-            Aksi halde demo veri gösterilecektir.
-            """
-        )
-        data_to_show = create_demo_data()
-        data_to_show["Prison_Years"] = data_to_show["Prison_Years"].astype(str)
-    else:
-        data_to_show = df.copy()
-        data_to_show["Prison_Years"] = data_to_show["Prison_Years"].astype(str)
+        st.warning("Veri seti bulunamadı, demo veri gösteriliyor.")
+        df = create_demo_data()
 
-    # Ceza süresi sayısal dönüşümü
-    data_to_show["ceza_yil_sayisal"] = data_to_show["Prison_Years"].apply(convert_sentence_length)
-
-    # Kolonları kolay kullanmak için kısaltmalar
-    data_to_show["suç_tipi"] = data_to_show["Prison_Offense"] if "Prison_Offense" in data_to_show.columns else None
-    data_to_show["gecmis_suc_sayisi"] = data_to_show["Num_Distinct_Arrest_Crime_Types"] if "Num_Distinct_Arrest_Crime_Types" in data_to_show.columns else None
+    # Ceza süresini sayısal yap
+    df["Prison_Years_Numeric"] = df["Prison_Years"].apply(convert_sentence_length)
 
     with st.expander("📂 Veri Seti Önizlemesi (İlk 10 Satır)"):
-        st.dataframe(data_to_show.head(10))
+        st.dataframe(df.head(10))
 
-    show_basic_stats(data_to_show)
+    # Temel istatistikler
+    st.subheader("📊 Temel İstatistikler")
+    total_records = len(df)
+    unique_crimes = df["Prison_Offense"].nunique() if "Prison_Offense" in df.columns else 0
+    avg_sentence = df["Prison_Years_Numeric"].mean()
+    recid_col = None
+    for c in df.columns:
+        if "recid" in c.lower():
+            recid_col = c
+            break
+    recid_rate = df[recid_col].mean() if recid_col else None
+
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("🗂️ Toplam Kayıt", total_records)
+    col2.metric("📌 Farklı Suç Tipi", unique_crimes)
+    col3.metric("⏳ Ortalama Ceza Süresi (yıl)", f"{avg_sentence:.2f}" if avg_sentence else "Veri yok")
+    col4.metric("⚠️ Yeniden Suç İşleme Oranı", f"{recid_rate:.2%}" if recid_rate else "Veri yok")
 
     st.markdown("---")
-
     st.subheader("📈 Veri Seti Görselleştirmeleri")
 
     col1, col2 = st.columns(2)
 
     with col1:
-        if data_to_show["suç_tipi"] is not None:
-            plot_category_distribution(data_to_show, "suç_tipi", "Suç Tipi Dağılımı")
+        if "Prison_Offense" in df.columns:
+            counts = df["Prison_Offense"].value_counts().reset_index()
+            counts.columns = ["Suç Tipi", "Sayı"]
+            fig = px.bar(counts, x="Suç Tipi", y="Sayı", title="Suç Tipi Dağılımı")
+            st.plotly_chart(fig, use_container_width=True)
         else:
             st.info("Suç tipi verisi mevcut değil.")
 
-        if data_to_show["gecmis_suc_sayisi"] is not None:
-            plot_histogram(data_to_show, "gecmis_suc_sayisi", "Geçmiş Suç Sayısı Dağılımı")
+        if "Num_Distinct_Arrest_Crime_Types" in df.columns:
+            fig2 = px.histogram(df, x="Num_Distinct_Arrest_Crime_Types", nbins=20, title="Geçmiş Suç Sayısı Dağılımı")
+            st.plotly_chart(fig2, use_container_width=True)
         else:
             st.info("Geçmiş suç sayısı verisi mevcut değil.")
 
     with col2:
-        st.info("📍 Bu veri setinde coğrafi (şehir veya bölge) bilgisi bulunmamaktadır, bu yüzden coğrafi dağılım grafiği gösterilemiyor.")
+        st.info("📍 Veri setinde coğrafi (şehir/bölge) bilgisi bulunmamaktadır.")
 
-        if "ceza_yil_sayisal" in data_to_show.columns and data_to_show["ceza_yil_sayisal"].notnull().any():
-            plot_histogram(data_to_show, "ceza_yil_sayisal", "Ceza Süresi Dağılımı (Yıl)")
+        if "Prison_Years_Numeric" in df.columns and df["Prison_Years_Numeric"].notnull().any():
+            fig3 = px.histogram(df, x="Prison_Years_Numeric", nbins=20, title="Ceza Süresi Dağılımı (Yıl)")
+            st.plotly_chart(fig3, use_container_width=True)
         else:
             st.info("Ceza süresi verisi mevcut değil veya sayısal değil.")
 
-    st.markdown("---")
     st.caption(f"📂 Repo: https://github.com/Yasinaslann/PrisonPredictApp • {APP_VERSION}")
 
-def placeholder_page(name: str):
-    st.title(name)
-    st.info("Bu sayfa henüz hazırlanmadı. 'Ana Sayfa' tasarımını onayladıktan sonra aynı kalite/formatta bu sayfayı da oluşturacağım.")
-
-st.sidebar.title("Navigasyon")
-page = st.sidebar.radio(
-    "Sayfa seçin",
-    ("Ana Sayfa", "Tahmin Modeli", "Tavsiye ve Profil Analizi", "Model Analizleri ve Harita")
-)
-
-if page == "Ana Sayfa":
-    home_page()
-elif page == "Tahmin Modeli":
-    placeholder_page("📊 Tahmin Modeli (Hazırlanıyor)")
-elif page == "Tavsiye ve Profil Analizi":
-    placeholder_page("💡 Tavsiye ve Profil Analizi (Hazırlanıyor)")
-elif page == "Model Analizleri ve Harita":
-    placeholder_page("📈 Model Analizleri ve Harita (Hazırlanıyor)")
+if __name__ == "__main__":
+    main()
