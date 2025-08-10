@@ -35,7 +35,7 @@ def info_icon(text):
 def home_page(df):
     st.title("🏛️ Yeniden Suç İşleme Tahmin Uygulaması")
 
-    # --- Üst metin kısmı (aynı) ---
+    # --- Üst metin ---
     st.markdown(
         """
         ### Proje Amacı  
@@ -75,9 +75,31 @@ def home_page(df):
 
     st.markdown("---")
 
+    # --- Veri seti temel istatistikler ---
+    st.subheader("📊 Veri Seti Temel İstatistikler")
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        total_rows = df.shape[0]
+        st.metric("🗂️ Toplam Kayıt", total_rows)
+    with col2:
+        total_cols = df.shape[1]
+        st.metric("📋 Sütun Sayısı", total_cols)
+    with col3:
+        unique_offenses = df["Prison_Offense"].nunique() if "Prison_Offense" in df.columns else "Bilinmiyor"
+        st.metric("📌 Farklı Suç Tipi", unique_offenses)
+
+    st.markdown("---")
+
+    # --- Veri seti ön izlemesi ---
+    with st.expander("📂 Veri Seti Önizlemesi (İlk 10 Satır)"):
+        st.dataframe(df.head(10))
+
+    st.markdown("---")
+
     recid_col = next((c for c in df.columns if "recid" in c.lower()), None)
 
-    # --- Grafikler üstte, sütunlar halinde ---
+    # --- Grafikler ---
     st.subheader("🎯 Yeniden Suç İşleme Oranı Dağılımı")
     col1, col2 = st.columns([3,1])
     with col1:
