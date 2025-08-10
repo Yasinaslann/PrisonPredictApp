@@ -15,7 +15,7 @@ CANDIDATE_PATHS = [
     Path("/mnt/data/Prisongüncelveriseti.csv")
 ]
 
-APP_VERSION = "v1.2 (Ana Sayfa)"
+APP_VERSION = "v1.3 (Ana Sayfa)"
 
 @st.cache_data(show_spinner=False)
 def load_data():
@@ -32,11 +32,27 @@ def info_icon(text):
     return f"ℹ️ {text}"
 
 def safe_mean(series):
-    # Sayısal olmayanları NaN yapıp sonra ortalama al
     return pd.to_numeric(series, errors='coerce').dropna().mean()
 
+def render_card(col, number, label, emoji, color="#0d47a1"):
+    card_style = """
+        background-color: #e3f2fd;
+        border-radius: 14px;
+        padding: 1.5rem 1rem;
+        text-align: center;
+        box-shadow: 0 5px 15px rgb(3 155 229 / 0.25);
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        margin-bottom: 1rem;
+        """
+    col.markdown(f"""
+        <div style="{card_style}">
+            <div style="font-size: 2.6rem; font-weight: 800; color: {color};">{number}</div>
+            <div style="font-size: 1.15rem; color: {color}; font-weight: 700;">{emoji} {label}</div>
+        </div>
+    """, unsafe_allow_html=True)
+
 def home_page(df):
-    # --- Üst Kısım: koyu mavi kutu ---
+    # Üst kutu (koyu mavi)
     st.markdown(
         """
         <div style="
@@ -46,6 +62,7 @@ def home_page(df):
             border-radius: 15px; 
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             box-shadow: 0 6px 15px rgba(0,0,0,0.3);
+            margin-bottom: 1.5rem;
             ">
             <h1 style="margin-bottom: 0.3rem;">🏛️ Yeniden Suç İşleme Tahmin Uygulaması</h1>
             <h3 style="margin-top:0; color:#90caf9;">Proje Amacı</h3>
@@ -62,9 +79,10 @@ def home_page(df):
         """,
         unsafe_allow_html=True
     )
+
     st.markdown("---")
 
-    # --- İstatistik kartları ---
+    # İstatistik kartları sadece dolu değerler gösterilecek
     total_rows = df.shape[0] if df is not None else 0
     total_cols = df.shape[1] if df is not None else 0
     unique_offenses = df["Prison_Offense"].nunique() if df is not None and "Prison_Offense" in df.columns else 0
@@ -76,42 +94,42 @@ def home_page(df):
 
     cols = st.columns(7)
 
-    card_style = """
-        background-color: #e3f2fd;
-        border-radius: 14px;
-        padding: 1.5rem 1rem;
-        text-align: center;
-        box-shadow: 0 5px 15px rgb(3 155 229 / 0.25);
-        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        """
-
-    def render_card(col, number, label, emoji, color="#0d47a1"):
-        col.markdown(f"""
-            <div style="{card_style}">
-                <div style="font-size: 2.6rem; font-weight: 800; color: {color};">{number}</div>
-                <div style="font-size: 1.15rem; color: {color}; font-weight: 700;">{emoji} {label}</div>
-            </div>
-        """, unsafe_allow_html=True)
-
+    # Kartları koşullu göster
     render_card(cols[0], f"{total_rows:,}", "Toplam Kayıt", "🗂️")
     render_card(cols[1], total_cols, "Sütun Sayısı", "📋")
     render_card(cols[2], unique_offenses, "Farklı Suç Tipi", "📌")
-    render_card(cols[3], f"{avg_sentence:.1f} ay" if avg_sentence else "N/A", "Ortalama Ceza Süresi", "⏳", "#1b5e20")
-    render_card(cols[4], f"{(recid_rate*100):.1f}%" if recid_rate else "N/A", "Yeniden Suç İşleme Oranı", "⚠️", "#b71c1c")
-    render_card(cols[5], f"{avg_age:.1f}" if avg_age else "N/A", "Ortalama Tahliye Yaşı", "👤", "#004d40")
-    render_card(cols[6], unique_education, "Eğitim Seviyesi Sayısı", "🎓", "#6a1b9a")
+
+    if avg_sentence and not pd.isna(avg_sentence):
+        render_card(cols[3], f"{avg_sentence:.1f} ay", "Ortalama Ceza Süresi", "⏳", "#1b5e20")
+
+    if recid_rate and not pd.isna(recid_rate):
+        render_card(cols[4], f"{(recid_rate*100):.1f}%", "Yeniden Suç İşleme Oranı", "⚠️", "#b71c1c")
+
+    if avg_age and not pd.isna(avg_age):
+        render_card(cols[5], f"{avg_age:.1f}", "Ortalama Tahliye Yaşı", "👤", "#004d40")
+
+    if unique_education > 0:
+        render_card(cols[6], unique_education, "Eğitim Seviyesi Sayısı", "🎓", "#6a1b9a")
 
     st.markdown("---")
 
-    # --- Veri seti önizleme ---
-    with st.expander("📂 Veri Seti Önizlemesi (İlk 10 Satır)"):
-        st.dataframe(df.head(10))
+    # Veri seti önizleme: 2 farklı modern stil ile
+    st.subheader("📂 Veri Seti Önizlemesi (İlk 10 Satır)")
+    st.dataframe(df.head(10), use_container_width=True)
+
+    with st.expander("📂 Veri Seti İkinci Önizleme (Detaylı)"):
+        # Daha geniş ve daha şık
+        st.write(
+            df.head(20).style
+            .background_gradient(cmap='Blues')
+            .set_properties(**{'font-family': 'Segoe UI', 'font-size': '12pt'})
+        )
 
     st.markdown("---")
 
     recid_col = next((c for c in df.columns if "recid" in c.lower()), None)
 
-    # --- Grafikler ---
+    # Grafikler
     st.subheader("🎯 Yeniden Suç İşleme Oranı (Pasta Grafiği)")
     col1, col2 = st.columns([3,1])
     with col1:
