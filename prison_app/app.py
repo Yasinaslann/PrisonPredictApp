@@ -35,16 +35,16 @@ def home_page(df):
     # --- Üst metin şık modern ---
     st.markdown(
         """
-        <div style="padding: 1rem 0;">
-            <h1 style="font-weight: 800; color: #0b3d91; margin-bottom: 0.3rem;">🏛️ Yeniden Suç İşleme Tahmin Uygulaması</h1>
-            <div style="font-size: 1.1rem; line-height: 1.6; color: #333;">
-                <h3 style="margin-bottom: 0.3rem; color: #1a237e;">Proje Amacı</h3>
+        <div style="padding: 1rem 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
+            <h1 style="font-weight: 800; color: #b56a36; margin-bottom: 0.3rem;">🏛️ Yeniden Suç İşleme Tahmin Uygulaması</h1>
+            <div style="font-size: 1.1rem; line-height: 1.6; color: #4b3a2f;">
+                <h3 style="margin-bottom: 0.3rem; color: #805c33;">Proje Amacı</h3>
                 <p>Bu uygulama, mahpusların tahliye sonrasında yeniden suç işleme riskini (recidivism)
                 veri bilimi ve makine öğrenmesi teknikleri ile tahmin etmeyi amaçlar.</p>
                 <p>Amaç, topluma yeniden uyum sürecini iyileştirecek stratejiler geliştirmek ve
                 risk analizi yaparak tekrar suç oranlarını azaltmaya katkı sağlamaktır.</p>
 
-                <h3 style="margin-top: 1.2rem; margin-bottom: 0.3rem; color: #1a237e;">Veri Seti Hakkında</h3>
+                <h3 style="margin-top: 1.2rem; margin-bottom: 0.3rem; color: #805c33;">Veri Seti Hakkında</h3>
                 <p>Veri seti, mahpusların demografik bilgileri, ceza süreleri, geçmiş suç kayıtları ve yeniden suç işleme bilgilerini içermektedir.</p>
                 <p>Bu bilgilerle risk faktörleri analiz edilip, model geliştirme için zengin bir kaynak sağlanmıştır.</p>
             </div>
@@ -55,42 +55,64 @@ def home_page(df):
 
     st.markdown("---")
 
-    # --- Modern istatistik kartları ---
+    # --- Modern başak temalı istatistik kartları ---
     total_rows = df.shape[0] if df is not None else 0
     total_cols = df.shape[1] if df is not None else 0
     unique_offenses = df["Prison_Offense"].nunique() if df is not None and "Prison_Offense" in df.columns else 0
 
-    cols = st.columns(3)
+    # Ek istatistikler
+    avg_age = f"{df['Age_at_Release'].mean():.1f}" if df is not None and "Age_at_Release" in df.columns else "N/A"
+    recid_col = next((c for c in df.columns if "recid" in c.lower()), None)
+    recid_rate = f"{df[recid_col].mean() * 100:.2f}%" if df is not None and recid_col in df.columns else "N/A"
+
+    cols = st.columns(5)
 
     card_style = """
-        background-color: #e3f2fd;
-        border-radius: 12px;
-        padding: 1.5rem;
+        background-color: #f5e9d4;
+        border-radius: 15px;
+        padding: 1.8rem 1.5rem;
         text-align: center;
-        box-shadow: 0 4px 10px rgb(3 155 229 / 0.3);
+        box-shadow: 0 6px 12px rgb(181 106 54 / 0.35);
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         """
 
     with cols[0]:
         st.markdown(f"""
         <div style="{card_style}">
-            <div style="font-size: 2.5rem; font-weight: 700; color: #0d47a1;">{total_rows:,}</div>
-            <div style="font-size: 1.1rem; color: #1976d2; font-weight: 600;">🗂️ Toplam Kayıt</div>
+            <div style="font-size: 2.7rem; font-weight: 700; color: #a5602e;">{total_rows:,}</div>
+            <div style="font-size: 1.15rem; color: #b17642; font-weight: 600;">🗂️ Toplam Kayıt</div>
         </div>
         """, unsafe_allow_html=True)
 
     with cols[1]:
         st.markdown(f"""
         <div style="{card_style}">
-            <div style="font-size: 2.5rem; font-weight: 700; color: #0d47a1;">{total_cols}</div>
-            <div style="font-size: 1.1rem; color: #1976d2; font-weight: 600;">📋 Sütun Sayısı</div>
+            <div style="font-size: 2.7rem; font-weight: 700; color: #a5602e;">{total_cols}</div>
+            <div style="font-size: 1.15rem; color: #b17642; font-weight: 600;">📋 Sütun Sayısı</div>
         </div>
         """, unsafe_allow_html=True)
 
     with cols[2]:
         st.markdown(f"""
         <div style="{card_style}">
-            <div style="font-size: 2.5rem; font-weight: 700; color: #0d47a1;">{unique_offenses}</div>
-            <div style="font-size: 1.1rem; color: #1976d2; font-weight: 600;">📌 Farklı Suç Tipi</div>
+            <div style="font-size: 2.7rem; font-weight: 700; color: #a5602e;">{unique_offenses}</div>
+            <div style="font-size: 1.15rem; color: #b17642; font-weight: 600;">📌 Farklı Suç Tipi</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with cols[3]:
+        st.markdown(f"""
+        <div style="{card_style}">
+            <div style="font-size: 2.7rem; font-weight: 700; color: #a5602e;">{avg_age}</div>
+            <div style="font-size: 1.15rem; color: #b17642; font-weight: 600;">🎂 Ortalama Tahliye Yaşı</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with cols[4]:
+        st.markdown(f"""
+        <div style="{card_style}">
+            <div style="font-size: 2.7rem; font-weight: 700; color: #a5602e;">{recid_rate}</div>
+            <div style="font-size: 1.15rem; color: #b17642; font-weight: 600;">🎯 Ortalama Yeniden Suç Oranı</div>
         </div>
         """, unsafe_allow_html=True)
 
@@ -101,8 +123,6 @@ def home_page(df):
         st.dataframe(df.head(10))
 
     st.markdown("---")
-
-    recid_col = next((c for c in df.columns if "recid" in c.lower()), None)
 
     # --- Grafikler ---
     st.subheader("🎯 Yeniden Suç İşleme Oranı Dağılımı")
@@ -115,7 +135,7 @@ def home_page(df):
             fig = px.pie(
                 names=labels, values=values, 
                 title="3 Yıl İçinde Yeniden Suç İşleme Oranı",
-                color_discrete_sequence=px.colors.sequential.RdBu
+                color_discrete_sequence=px.colors.sequential.Peach
             )
             fig.update_traces(textposition='inside', textinfo='percent+label')
             fig.update_layout(title_x=0.5, template="plotly_white")
@@ -139,7 +159,7 @@ def home_page(df):
                     labels={"x": col_name, "y": "Kişi Sayısı"},
                     title=f"{col_name.replace('_',' ')} Dağılımı",
                     color=counts.index,
-                    color_discrete_sequence=px.colors.qualitative.Safe
+                    color_discrete_sequence=px.colors.qualitative.Dark24
                 )
                 fig_bar.update_layout(showlegend=False, template="plotly_white", title_x=0.5)
                 st.plotly_chart(fig_bar, use_container_width=True)
@@ -151,7 +171,7 @@ def home_page(df):
                         labels={"x": col_name, "y": "Ortalama Recidivism Oranı"},
                         title=f"{col_name.replace('_',' ')} Bazında Yeniden Suç İşleme Oranı",
                         color=recid_means.index,
-                        color_discrete_sequence=px.colors.qualitative.Safe
+                        color_discrete_sequence=px.colors.qualitative.Dark24
                     )
                     fig_recid.update_layout(showlegend=False, template="plotly_white", title_x=0.5, yaxis=dict(range=[0,1]))
                     st.plotly_chart(fig_recid, use_container_width=True)
@@ -182,7 +202,7 @@ def home_page(df):
             fig_corr = px.bar(
                 corr_df, x="Özellik", y="Recidivism Korelasyonu",
                 color="Recidivism Korelasyonu",
-                color_continuous_scale=px.colors.diverging.RdBu,
+                color_continuous_scale=px.colors.diverging.Spectral,
                 title="Özelliklerin Yeniden Suç İşleme ile Korelasyonu"
             )
             fig_corr.update_layout(template="plotly_white", title_x=0.5)
