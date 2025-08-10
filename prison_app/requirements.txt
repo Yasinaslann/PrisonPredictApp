@@ -8,4 +8,6 @@ shap
 matplotlib
 seaborn
 ipython
+fpdf
+
 
