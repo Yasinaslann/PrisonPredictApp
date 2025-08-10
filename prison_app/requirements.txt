@@ -9,5 +9,7 @@ matplotlib
 seaborn
 ipython
 fpdf
+requests
+
 
 
