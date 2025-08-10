@@ -34,7 +34,7 @@ def load_data() -> pd.DataFrame | None:
 df = load_data()
 
 def home_page(df: pd.DataFrame | None):
-    # Proje açıklaması ve veri seti hakkında
+    # Üst - Proje açıklaması ve veri seti hakkında
     st.markdown("""
     <div style="background-color:#0b1d51; padding:25px; border-radius:12px; margin-bottom: 25px;">
     <h1 style="color:#f0f2f6; margin-bottom: 0;">🏛️ Yeniden Suç İşleme Tahmin Uygulaması</h1>
@@ -52,16 +52,26 @@ def home_page(df: pd.DataFrame | None):
 
     st.markdown("---")
 
-    # İstatistik kartları
+    # Veri seti istatistikleri kartları (şık ve modern)
     if df is not None:
         total_records = len(df)
         total_columns = len(df.columns)
         unique_offenses = df['Prison_Offense'].nunique() if 'Prison_Offense' in df.columns else "Veri Yok"
+        avg_age = f"{df['Age_at_Release'].dropna().astype(float).mean():.1f}" if 'Age_at_Release' in df.columns else "N/A"
+        recid_rate = "N/A"
+        if 'Recidivism_Within_3years' in df.columns:
+            try:
+                recid_rate = f"{df['Recidivism_Within_3years'].dropna().astype(float).mean() * 100:.2f}%"
+            except Exception:
+                recid_rate = "N/A"
 
-        cols = st.columns(3)
+        st.markdown("### 📊 Veri Seti Temel İstatistikler")
+        cols = st.columns(5)
         cols[0].metric(label="🗂️ Toplam Kayıt", value=f"{total_records:,}")
         cols[1].metric(label="📋 Sütun Sayısı", value=f"{total_columns}")
         cols[2].metric(label="📌 Farklı Suç Tipi", value=f"{unique_offenses}")
+        cols[3].metric(label="📅 Ortalama Yaş", value=avg_age)
+        cols[4].metric(label="🎯 Ortalama Yeniden Suç Oranı", value=recid_rate)
     else:
         st.warning("Veri seti yüklenemedi. 'Prisongüncelveriseti.csv' dosyasını proje dizinine ekleyin.")
 
@@ -71,6 +81,8 @@ def home_page(df: pd.DataFrame | None):
     if df is not None:
         with st.expander("📂 Veri Seti Önizlemesi (İlk 10 Satır)"):
             st.dataframe(df.head(10))
+
+    st.markdown("---")
 
     # Grafik seçimleri sütunda, yan yana
     st.markdown("## 📈 Veri Seti Görselleştirmeleri")
