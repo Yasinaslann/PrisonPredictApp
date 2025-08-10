@@ -55,7 +55,7 @@ def create_demo_data():
     })
     return demo
 
-def main():
+def home_page(df):
     st.title("🏛️ Yeniden Suç İşleme Tahmin Uygulaması")
 
     st.markdown("""
@@ -69,7 +69,6 @@ def main():
 
     """)
 
-    df = load_data()
     if df is None:
         st.warning("Veri seti bulunamadı, demo veri gösteriliyor.")
         df = create_demo_data()
@@ -128,6 +127,28 @@ def main():
             st.info("Ceza süresi verisi mevcut değil veya sayısal değil.")
 
     st.caption(f"📂 Repo: https://github.com/Yasinaslann/PrisonPredictApp • {APP_VERSION}")
+
+def placeholder_page(name):
+    st.title(name)
+    st.info("Bu sayfa henüz hazırlanmadı. Ana sayfa hazırlandıktan sonra bu sayfa geliştirilecektir.")
+
+def main():
+    df = load_data()
+
+    st.sidebar.title("Navigasyon")
+    page = st.sidebar.radio(
+        "Sayfa seçin",
+        ("Ana Sayfa", "Tahmin Modeli", "Tavsiye ve Profil Analizi", "Model Analizleri ve Harita")
+    )
+
+    if page == "Ana Sayfa":
+        home_page(df)
+    elif page == "Tahmin Modeli":
+        placeholder_page("📊 Tahmin Modeli (Hazırlanıyor)")
+    elif page == "Tavsiye ve Profil Analizi":
+        placeholder_page("💡 Tavsiye ve Profil Analizi (Hazırlanıyor)")
+    elif page == "Model Analizleri ve Harita":
+        placeholder_page("📈 Model Analizleri ve Harita (Hazırlanıyor)")
 
 if __name__ == "__main__":
     main()
