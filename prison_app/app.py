@@ -34,14 +34,13 @@ def load_data() -> pd.DataFrame | None:
 df = load_data()
 
 def home_page(df: pd.DataFrame | None):
+    # Proje açıklaması ve veri seti hakkında
     st.markdown("""
-    <div style="background-color:#0b1d51; padding:20px; border-radius:10px;">
+    <div style="background-color:#0b1d51; padding:25px; border-radius:12px; margin-bottom: 25px;">
     <h1 style="color:#f0f2f6; margin-bottom: 0;">🏛️ Yeniden Suç İşleme Tahmin Uygulaması</h1>
-    <p style="color:#ccd7ff; font-size:16px; line-height:1.5;">
-    Bu uygulama, mahpusların tahliye sonrasında yeniden suç işleme riskini (recidivism) <br>
-    veri bilimi ve makine öğrenmesi teknikleri ile tahmin etmeyi amaçlar.<br>
-    Amaç, topluma yeniden uyum sürecini iyileştirecek stratejiler geliştirmek ve <br>
-    risk analizi yaparak tekrar suç oranlarını azaltmaya katkı sağlamaktır.
+    <p style="color:#ccd7ff; font-size:16px; line-height:1.5; margin-top: 0.5rem;">
+    Bu uygulama, mahpusların tahliye sonrasında yeniden suç işleme riskini (recidivism) veri bilimi ve makine öğrenmesi teknikleri ile tahmin etmeyi amaçlar.<br>
+    Amaç, topluma yeniden uyum sürecini iyileştirecek stratejiler geliştirmek ve risk analizi yaparak tekrar suç oranlarını azaltmaya katkı sağlamaktır.
     </p>
     <h3 style="color:#a7b7ff; margin-top:2rem; margin-bottom:0.5rem;">Veri Seti Hakkında</h3>
     <p style="color:#ccd7ff; font-size:14px; line-height:1.5;">
@@ -53,16 +52,16 @@ def home_page(df: pd.DataFrame | None):
 
     st.markdown("---")
 
-    # Veri seti temel istatistikler
+    # İstatistik kartları
     if df is not None:
         total_records = len(df)
         total_columns = len(df.columns)
-        unique_offenses = df['Prison_Offense'].nunique() if 'Prison_Offense' in df.columns else 'N/A'
-        
-        col1, col2, col3 = st.columns(3)
-        col1.metric("🗂️ Toplam Kayıt", total_records)
-        col2.metric("📋 Sütun Sayısı", total_columns)
-        col3.metric("📌 Farklı Suç Tipi", unique_offenses)
+        unique_offenses = df['Prison_Offense'].nunique() if 'Prison_Offense' in df.columns else "Veri Yok"
+
+        cols = st.columns(3)
+        cols[0].metric(label="🗂️ Toplam Kayıt", value=f"{total_records:,}")
+        cols[1].metric(label="📋 Sütun Sayısı", value=f"{total_columns}")
+        cols[2].metric(label="📌 Farklı Suç Tipi", value=f"{unique_offenses}")
     else:
         st.warning("Veri seti yüklenemedi. 'Prisongüncelveriseti.csv' dosyasını proje dizinine ekleyin.")
 
@@ -73,7 +72,7 @@ def home_page(df: pd.DataFrame | None):
         with st.expander("📂 Veri Seti Önizlemesi (İlk 10 Satır)"):
             st.dataframe(df.head(10))
 
-    # Grafik tipi seçimi sütunda
+    # Grafik seçimleri sütunda, yan yana
     st.markdown("## 📈 Veri Seti Görselleştirmeleri")
     if df is None:
         st.info("Veri yüklenemediği için grafik gösterilemiyor.")
@@ -152,9 +151,11 @@ def home_page(df: pd.DataFrame | None):
     else:
         st.info("Yaş verisi bulunamadı.")
 
+
 def placeholder_page(name: str):
     st.title(name)
     st.info("Bu sayfa henüz hazırlanmadı.")
+
 
 # Sidebar
 st.sidebar.title("Navigasyon")
