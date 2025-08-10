@@ -55,47 +55,48 @@ def create_demo_data():
     })
     return demo
 
+def plot_graph(df, column, grafik_tipi, title):
+    if grafik_tipi == "Bar Grafiği":
+        counts = df[column].value_counts().reset_index()
+        counts.columns = [column, "Sayı"]
+        fig = px.bar(counts, x=column, y="Sayı", title=title)
+    elif grafik_tipi == "Histogram":
+        fig = px.histogram(df, x=column, nbins=20, title=title)
+    else:  # Box Plot
+        fig = px.box(df, y=column, title=title)
+    fig.update_layout(template="plotly_white", title_x=0.5)
+    return fig
+
 def home_page(df):
     st.title("🏛️ Yeniden Suç İşleme Tahmin Uygulaması")
 
     st.markdown("""
-    ## Proje Amacı
+    ### Proje Amacı
 
-    Bu uygulama, mahpusların tahliye sonrası topluma yeniden uyum süreçlerinde karşılaşabilecekleri riskleri  
-    azaltmak amacıyla geliştirilmiştir. Yeniden suç işleme oranlarını analiz etmek ve tahmin etmek için gelişmiş  
-    veri bilimi ve makine öğrenmesi teknikleri kullanılmaktadır. Böylece, riskli bireylerin tespiti sağlanarak,  
-    uygun rehabilitasyon ve destek programlarının planlanmasına katkı sağlanır. Bu yaklaşım, toplum güvenliğinin  
-    artırılması ve suçun tekrarlanma oranının azaltılması hedeflenmektedir.
+    Tahliye sonrası mahpusların yeniden suç işleme riskini analiz ederek,  
+    toplum güvenliğini artırmak ve bireylerin rehabilitasyon süreçlerini desteklemek amacıyla geliştirilmiş bir platformdur.  
+    Veri bilimi ve makine öğrenmesi yöntemleri kullanılarak, riskli durumların önceden tespiti ve etkili müdahaleler sağlanması hedeflenmektedir.
 
-    ## Veri Seti Hakkında
+    ### Veri Seti
 
-    Kullanılan veri seti, mahpusların demografik bilgileri, ceza süreleri, geçmişte işledikleri suç tipleri,  
-    yeniden suç işleme durumu ve benzeri çeşitli özelliklerden oluşmaktadır. Veri seti, modelleme ve analizler için  
-    zengin ve kapsamlı bir temel oluşturur. Bu sayede farklı özelliklerin yeniden suç işleme üzerindeki etkileri  
-    incelenebilir.
-
+    Veri seti, mahpusların demografik bilgileri, ceza süreleri, suç tipleri ve geçmiş suç kayıtlarını içermektedir.  
+    Bu kapsamlı veri, suçun tekrarlanma olasılığını etkileyen faktörlerin derinlemesine incelenmesine olanak tanır.
     """)
 
     if df is None:
-        st.warning("Veri seti bulunamadı, demo veri gösteriliyor.")
+        st.warning("Veri seti bulunamadı. Örnek demo veri gösterilmektedir.")
         df = create_demo_data()
 
-    # Ceza süresini sayısal yap
     df["Prison_Years_Numeric"] = df["Prison_Years"].apply(convert_sentence_length)
 
     with st.expander("📂 Veri Seti Önizlemesi (İlk 10 Satır)"):
         st.dataframe(df.head(10))
 
-    # Temel istatistikler
     st.subheader("📊 Temel İstatistikler")
     total_records = len(df)
     unique_crimes = df["Prison_Offense"].nunique() if "Prison_Offense" in df.columns else 0
     avg_sentence = df["Prison_Years_Numeric"].mean()
-    recid_col = None
-    for c in df.columns:
-        if "recid" in c.lower():
-            recid_col = c
-            break
+    recid_col = next((c for c in df.columns if "recid" in c.lower()), None)
     recid_rate = df[recid_col].mean() if recid_col else None
 
     col1, col2, col3, col4 = st.columns(4)
@@ -105,10 +106,10 @@ def home_page(df):
     col4.metric("⚠️ Yeniden Suç İşleme Oranı", f"{recid_rate:.2%}" if recid_rate else "Veri yok")
 
     st.markdown("""
-    - **Toplam Kayıt:** Veri setindeki toplam mahpus sayısını gösterir.  
-    - **Farklı Suç Tipi:** Veri setindeki benzersiz suç kategorilerinin sayısı.  
-    - **Ortalama Ceza Süresi:** Ceza sürelerinin sayısal ortalaması, yıllık bazda.  
-    - **Yeniden Suç İşleme Oranı:** Veri setindeki mahpusların tahliye sonrası 3 yıl içinde yeniden suç işleme oranı.
+    - **Toplam Kayıt:** Veri setindeki toplam birey sayısı.  
+    - **Farklı Suç Tipi:** Suç kategorilerinin benzersiz sayısı.  
+    - **Ortalama Ceza Süresi:** Yıllık bazda ortalama ceza süresi.  
+    - **Yeniden Suç İşleme Oranı:** Tahliye sonrası 3 yıl içinde tekrar suç işleme oranı.
     """)
 
     st.markdown("---")
@@ -116,55 +117,46 @@ def home_page(df):
 
     col1, col2 = st.columns(2)
 
-    grafik_tipi = st.selectbox(
-        "Grafik tipi seçin:",
-        options=["Bar Grafiği", "Histogram", "Kutu Grafiği (Box Plot)"],
-        index=0
-    )
-
     with col1:
+        st.markdown("### Suç Tipi Dağılımı")
+        grafik_tipi_suc = st.selectbox(
+            "Grafik Tipi:",
+            ["Bar Grafiği", "Histogram", "Kutu Grafiği (Box Plot)"],
+            key="grafik_suc",
+            label_visibility="collapsed"
+        )
         if "Prison_Offense" in df.columns:
-            counts = df["Prison_Offense"].value_counts().reset_index()
-            counts.columns = ["Suç Tipi", "Sayı"]
-
-            if grafik_tipi == "Bar Grafiği":
-                fig = px.bar(counts, x="Suç Tipi", y="Sayı", title="Suç Tipi Dağılımı")
-            elif grafik_tipi == "Histogram":
-                fig = px.histogram(df, x="Prison_Offense", title="Suç Tipi Histogramı")
-            else:  # Box Plot
-                st.info("Suç tipi için kutu grafiği anlamlı değil, Bar veya Histogram seçin.")
-                fig = None
-
-            if fig:
+            if grafik_tipi_suc == "Kutu Grafiği (Box Plot)":
+                st.info("Suç tipi kategorik olduğundan kutu grafiği uygun değildir.")
+            else:
+                fig = plot_graph(df, "Prison_Offense", grafik_tipi_suc, "Suç Tipi Dağılımı")
                 st.plotly_chart(fig, use_container_width=True)
         else:
             st.info("Suç tipi verisi mevcut değil.")
 
+        st.markdown("### Geçmiş Suç Sayısı Dağılımı")
+        grafik_tipi_gecmis = st.selectbox(
+            "Grafik Tipi:",
+            ["Bar Grafiği", "Histogram", "Kutu Grafiği (Box Plot)"],
+            key="grafik_gecmis",
+            label_visibility="collapsed"
+        )
         if "Num_Distinct_Arrest_Crime_Types" in df.columns:
-            if grafik_tipi == "Bar Grafiği":
-                counts2 = df["Num_Distinct_Arrest_Crime_Types"].value_counts().reset_index()
-                counts2.columns = ["Geçmiş Suç Sayısı", "Sayı"]
-                fig2 = px.bar(counts2.sort_values("Geçmiş Suç Sayısı"), x="Geçmiş Suç Sayısı", y="Sayı", title="Geçmiş Suç Sayısı Dağılımı")
-            elif grafik_tipi == "Histogram":
-                fig2 = px.histogram(df, x="Num_Distinct_Arrest_Crime_Types", nbins=20, title="Geçmiş Suç Sayısı Histogramı")
-            else:
-                fig2 = px.box(df, y="Num_Distinct_Arrest_Crime_Types", title="Geçmiş Suç Sayısı Kutu Grafiği")
-
+            fig2 = plot_graph(df, "Num_Distinct_Arrest_Crime_Types", grafik_tipi_gecmis, "Geçmiş Suç Sayısı Dağılımı")
             st.plotly_chart(fig2, use_container_width=True)
         else:
             st.info("Geçmiş suç sayısı verisi mevcut değil.")
 
     with col2:
+        st.markdown("### Ceza Süresi Dağılımı (Yıl)")
+        grafik_tipi_ceza = st.selectbox(
+            "Grafik Tipi:",
+            ["Bar Grafiği", "Histogram", "Kutu Grafiği (Box Plot)"],
+            key="grafik_ceza",
+            label_visibility="collapsed"
+        )
         if "Prison_Years_Numeric" in df.columns and df["Prison_Years_Numeric"].notnull().any():
-            if grafik_tipi == "Bar Grafiği":
-                counts3 = df["Prison_Years_Numeric"].value_counts().reset_index()
-                counts3.columns = ["Ceza Süresi (yıl)", "Sayı"]
-                fig3 = px.bar(counts3.sort_values("Ceza Süresi (yıl)"), x="Ceza Süresi (yıl)", y="Sayı", title="Ceza Süresi Dağılımı")
-            elif grafik_tipi == "Histogram":
-                fig3 = px.histogram(df, x="Prison_Years_Numeric", nbins=20, title="Ceza Süresi Histogramı (Yıl)")
-            else:
-                fig3 = px.box(df, y="Prison_Years_Numeric", title="Ceza Süresi Kutu Grafiği (Yıl)")
-
+            fig3 = plot_graph(df, "Prison_Years_Numeric", grafik_tipi_ceza, "Ceza Süresi Dağılımı (Yıl)")
             st.plotly_chart(fig3, use_container_width=True)
         else:
             st.info("Ceza süresi verisi mevcut değil veya sayısal değil.")
