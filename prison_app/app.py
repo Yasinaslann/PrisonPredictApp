@@ -15,7 +15,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# --- DOSYA YOLLARINI KENDİ ORTAMINA GÖRE AYARLA ---
+# Dosya yollarını kendi ortamına göre değiştir
 MODEL_PATH = "prison_app/catboost_model.pkl"
 CAT_FEATURES_PATH = "prison_app/cat_features.pkl"
 FEATURE_NAMES_PATH = "prison_app/feature_names.pkl"
@@ -31,12 +31,18 @@ def load_model_and_data():
         with open(FEATURE_NAMES_PATH, "rb") as f:
             feature_names = pickle.load(f)
         df = pd.read_csv(DATA_PATH)
+
+        # Temizlik: Age_at_Release sütununda null varsa doldur ya da çıkar
+        df = df.dropna(subset=["Age_at_Release"])
+        # Gerekirse diğer null'ları da doldurabilir veya çıkarabilirsin.
+
         return model, cat_features, feature_names, df
     except Exception as e:
-        st.error(f"Veri ya da model yüklenirken hata oluştu: {e}")
+        st.error(f"Veri veya model yükleme hatası: {e}")
         return None, None, None, None
 
 def preprocess_input(df_input, cat_features):
+    # Kategorik sütunlar string olmalı
     for col in cat_features:
         if col in df_input.columns:
             df_input[col] = df_input[col].astype(str)
@@ -49,23 +55,23 @@ def sidebar_info():
     st.sidebar.title("🚀 Cezaevi Risk Tahmin Uygulaması")
     st.sidebar.markdown("""
     ### Navigasyon
-    - 🏠 Ana Sayfa: Proje ve veri seti tanıtımı  
-    - 🧠 Tahmin: Kişiye özel suç risk tahmini  
-    - 📊 Veri Analizi: Veri seti keşfi ve görselleştirme  
-    - 📈 Model Performansı: Modelin detaylı değerlendirmesi  
+    - 🏠 Ana Sayfa: Proje & Veri seti tanıtımı  
+    - 🧠 Tahmin: Kişisel suç tekrar riski tahmini  
+    - 📊 Veri Analizi: Veri setini keşfet & görselleştir  
+    - 📈 Model Performansı: Model metrikleri & grafikler  
     ---
-    ⚠️ Model CatBoost ile geliştirilmiştir. Kategorik değişkenler string olarak işlenmektedir.
+    ⚠️ Model CatBoost tabanlıdır, kategorik veriler string formatında işlenir.
     """)
 
 # --- ANA SAYFA ---
 def home_page(df):
     st.title("🚀 Cezaevi Tekrar Suç Riski Tahmin Projesi")
     st.markdown("""
-    Bu proje, cezaevinden çıkış yapan bireylerin tekrar suç işleme riskini tahmin etmeyi amaçlamaktadır.  
-    Model, çeşitli kişisel ve sosyoekonomik özellikleri kullanarak risk skoru hesaplar.  
+    Bu proje, cezaevinden çıktıktan sonra kişilerin tekrar suç işleme olasılığını tahmin etmek üzere geliştirilmiştir.  
+    Model, kişinin demografik ve sosyoekonomik özelliklerini analiz ederek risk skorunu verir.  
     """)
 
-    if df is not None:
+    if df is not None and not df.empty:
         st.subheader("Veri Seti Hakkında Genel Bilgiler")
         st.write(f"- Kayıt sayısı: **{len(df)}**")
         st.write(f"- Özellik sayısı: **{len(df.columns)}**")
@@ -74,7 +80,7 @@ def home_page(df):
         st.subheader("Örnek Veri")
         st.dataframe(df.head(10))
 
-        st.subheader("Yaş Dağılımı")
+        st.subheader("Yaş Dağılımı ve Tekrar Suç Oranı")
         fig = px.histogram(df, x="Age_at_Release", nbins=30, color="Recidivism_Within_3years",
                            labels={"Age_at_Release": "Yaş", "Recidivism_Within_3years": "Tekrar Suç Durumu"})
         st.plotly_chart(fig, use_container_width=True)
@@ -83,54 +89,58 @@ def home_page(df):
         fig2 = px.pie(df, names="Gender", title="Cinsiyet Dağılımı")
         st.plotly_chart(fig2, use_container_width=True)
 
-        st.subheader("Eğitim Seviyesi Dağılımı ve Risk")
         if "Education_Level" in df.columns:
+            st.subheader("Eğitim Seviyesi Dağılımı ve Tekrar Suç Durumu")
             fig3 = px.histogram(df, x="Education_Level", color="Recidivism_Within_3years", barmode='group')
             st.plotly_chart(fig3, use_container_width=True)
     else:
-        st.warning("Veri yüklenemediği için ana sayfa içeriği gösterilemiyor.")
+        st.warning("Veri yüklenemedi veya boş.")
 
 # --- TAHMİN SAYFASI ---
 def prediction_page(model, cat_features, feature_names, df):
     st.title("🧠 Kişisel Suç Tekrarı Tahmin Modülü")
-    st.info("Lütfen tüm alanları doldurun. Her alanın yanında açıklamalar bulunmaktadır.")
+    st.info("Lütfen tüm alanları doldurun. Alanların yanında açıklamalar ve ipuçları bulunmaktadır.")
 
-    # Tahmin geçmişi için session state
+    if model is None or df is None:
+        st.error("Model ya da veri yüklenmediği için tahmin yapılamıyor.")
+        return
+
     if "predictions" not in st.session_state:
         st.session_state["predictions"] = []
 
     input_data = {}
 
-    # Özelliklere ait açıklamalar
+    # Özellik açıklamaları
     feature_help = {
         "Age_at_Release": "Cezaevinden çıkış yapılan yaş.",
-        "Gender": "Kişinin cinsiyeti.",
+        "Gender": "Kişinin cinsiyeti (erkek/kadın).",
         "Race": "Kişinin etnik kökeni.",
         "Education_Level": "Kişinin eğitim durumu.",
-        "Supervision_Risk_Score_First": "Denetim risk puanı; yüksek puan daha yüksek risk demektir."
+        "Supervision_Risk_Score_First": "Denetim risk puanı; yüksek puan, daha yüksek risk anlamına gelir."
     }
 
-    # Inputlar
+    # Girdi alanları oluştur
     for feature in feature_names:
-        if feature == "ID":  # ID inputu alma
+        if feature == "ID":  # ID almıyoruz
             continue
-
-        help_text = feature_help.get(feature, "Bu özellik hakkında bilgi yok.")
-
+        help_text = feature_help.get(feature, "Bu özellik hakkında bilgi bulunmamaktadır.")
         try:
             if feature in cat_features:
                 options = df[feature].dropna().astype(str).unique().tolist()
-                default_index = 0 if options else None
+                if not options:
+                    st.warning(f"{feature} için seçim yapacak veri yok.")
+                    continue
+                default_index = 0
                 val = st.selectbox(f"{feature} ❓", options=options, index=default_index, help=help_text)
                 input_data[feature] = val
             else:
-                min_val = int(df[feature].min())
-                max_val = int(df[feature].max())
-                median_val = int(df[feature].median())
+                min_val = int(df[feature].dropna().min())
+                max_val = int(df[feature].dropna().max())
+                median_val = int(df[feature].dropna().median())
                 val = st.number_input(f"{feature} ❓", min_value=min_val, max_value=max_val, value=median_val, step=1, help=help_text)
                 input_data[feature] = val
         except Exception as e:
-            st.error(f"{feature} girdisi oluşturulurken hata: {e}")
+            st.error(f"Girdi alanı oluşturulurken hata: {e}")
             return
 
     df_input = pd.DataFrame([input_data])
@@ -158,7 +168,6 @@ def prediction_page(model, cat_features, feature_names, df):
                 ))
                 st.plotly_chart(fig_gauge)
 
-            # SHAP açıklaması
             st.subheader("Tahmin Açıklaması (Özelliklerin Etkisi)")
             explainer = shap.TreeExplainer(model)
             shap_values = explainer.shap_values(pool)
@@ -171,13 +180,12 @@ def prediction_page(model, cat_features, feature_names, df):
             st.session_state["predictions"].append({
                 **input_data,
                 "Tahmin": risk_label,
-                "Risk Skoru": round(pred_proba * 100, 2) if pred_proba is not None else None
+                "Risk Skoru (%)": round(pred_proba * 100, 2) if pred_proba is not None else None
             })
 
         except Exception as e:
             st.error(f"Tahmin sırasında hata oluştu: {e}")
 
-    # Tahmin geçmişi göster ve indir
     if st.session_state["predictions"]:
         st.subheader("🔎 Tahmin Geçmişi")
         df_pred = pd.DataFrame(st.session_state["predictions"])
@@ -189,18 +197,23 @@ def prediction_page(model, cat_features, feature_names, df):
 # --- VERİ ANALİZİ ---
 def analysis_page(df):
     st.title("📊 Veri Keşfi ve Gelişmiş Analiz")
-    if df is None:
-        st.warning("Veri yüklenemedi, analiz yapılamıyor.")
+
+    if df is None or df.empty:
+        st.warning("Veri yüklenemedi veya boş.")
         return
 
-    st.markdown("Filtreler ve interaktif grafiklerle veri setini keşfedin.")
+    st.markdown("Veri setinizi filtreleyip etkileşimli grafiklerle detaylıca keşfedebilirsiniz.")
 
     # Filtreler
     genders = df["Gender"].dropna().unique().tolist()
     selected_genders = st.sidebar.multiselect("Cinsiyet Seçiniz", options=genders, default=genders)
 
-    age_min = int(df["Age_at_Release"].min())
-    age_max = int(df["Age_at_Release"].max())
+    try:
+        age_min = int(df["Age_at_Release"].dropna().min())
+        age_max = int(df["Age_at_Release"].dropna().max())
+    except:
+        age_min, age_max = 18, 100  # varsayılan
+
     selected_age = st.sidebar.slider("Yaş Aralığı", min_value=age_min, max_value=age_max, value=(age_min, age_max))
 
     filtered_df = df[
@@ -209,7 +222,6 @@ def analysis_page(df):
         (df["Age_at_Release"] <= selected_age[1])
     ]
 
-    # Grafikler
     st.subheader("Yaş Dağılımı")
     fig1 = px.histogram(filtered_df, x="Age_at_Release", nbins=30, title="Yaş Dağılımı")
     st.plotly_chart(fig1, use_container_width=True)
@@ -220,9 +232,12 @@ def analysis_page(df):
 
     st.subheader("Korelasyon Matrisi (Sayısal Değişkenler)")
     numeric_cols = filtered_df.select_dtypes(include=np.number).columns.tolist()
-    corr_matrix = filtered_df[numeric_cols].corr()
-    fig3 = px.imshow(corr_matrix, text_auto=True, title="Korelasyon Matrisi")
-    st.plotly_chart(fig3, use_container_width=True)
+    if numeric_cols:
+        corr_matrix = filtered_df[numeric_cols].corr()
+        fig3 = px.imshow(corr_matrix, text_auto=True, title="Korelasyon Matrisi")
+        st.plotly_chart(fig3, use_container_width=True)
+    else:
+        st.info("Sayısal veri bulunamadı korelasyon matrisi için.")
 
     if "Education_Level" in filtered_df.columns:
         st.subheader("Eğitim Seviyesi ve Tekrar Suç Durumu")
@@ -240,14 +255,18 @@ def analysis_page(df):
 def performance_page(df, model, cat_features, feature_names):
     st.title("📈 Model Performans ve Değerlendirme")
 
-    if df is None or model is None:
-        st.warning("Model veya veri yüklenmediği için performans gösterilemiyor.")
+    if df is None or df.empty:
+        st.warning("Veri yüklenemediği için performans gösterilemiyor.")
+        return
+
+    if model is None:
+        st.warning("Model yüklenemediği için performans gösterilemiyor.")
         return
 
     y_true = df["Recidivism_Within_3years"].astype(int)
     X = df[feature_names].copy()
 
-    # CatBoost için kategorik değişkenleri string yap
+    # Kategorik sütunlar string formatında olmalı
     for col in cat_features:
         if col in X.columns:
             X[col] = X[col].astype(str)
@@ -264,6 +283,7 @@ def performance_page(df, model, cat_features, feature_names):
     roc_auc = roc_auc_score(y_true, y_proba) if y_proba is not None else None
 
     # Metrikler Tablosu
+    roc_auc_str = f"{roc_auc:.3f}" if roc_auc is not None else "Yok"
     st.markdown(f"""
     | Metrik      | Değer | Açıklama |
     |-------------|-------|----------|
@@ -271,7 +291,7 @@ def performance_page(df, model, cat_features, feature_names):
     | Precision   | {precision:.3f} | Pozitif tahminlerin doğruluğu |
     | Recall      | {recall:.3f} | Gerçek pozitiflerin yakalanma oranı |
     | F1 Score    | {f1:.3f} | Precision ve Recall dengesi |
-    | ROC AUC     | {roc_auc:.3f if roc_auc is not None else 'Yok'} | Modelin ayırıcı gücü |
+    | ROC AUC     | {roc_auc_str} | Modelin ayırıcı gücü |
     """)
 
     # Confusion Matrix
@@ -288,7 +308,7 @@ def performance_page(df, model, cat_features, feature_names):
         fig_roc = go.Figure()
         fig_roc.add_trace(go.Scatter(x=fpr, y=tpr, mode='lines', name='ROC Curve'))
         fig_roc.add_trace(go.Scatter(x=[0, 1], y=[0, 1], mode='lines',
-                                   line=dict(dash='dash'), name='Random Guess'))
+                                    line=dict(dash='dash'), name='Random Guess'))
         fig_roc.update_layout(title="ROC Curve", xaxis_title="False Positive Rate", yaxis_title="True Positive Rate")
         st.plotly_chart(fig_roc, use_container_width=True)
 
@@ -305,18 +325,16 @@ def performance_page(df, model, cat_features, feature_names):
     # Feature Importance
     st.subheader("Model Özellik Önem Düzeyi")
     fi = model.get_feature_importance(pool=pool, type='FeatureImportance')
-    fi_df = pd.DataFrame({
-        "Özellik": feature_names,
-        "Önem": fi
-    }).sort_values(by="Önem", ascending=False).head(15)
-
-    fig_fi = px.bar(fi_df, x="Önem", y="Özellik", orientation='h', title="En Önemli 15 Özellik")
+    fi_df = pd.DataFrame({"Feature": feature_names, "Importance": fi})
+    fi_df = fi_df.sort_values(by="Importance", ascending=False)
+    fig_fi = px.bar(fi_df.head(15), x="Importance", y="Feature", orientation='h',
+                    title="En Önemli 15 Özellik")
     st.plotly_chart(fig_fi, use_container_width=True)
 
-# --- MAIN ---
+# --- ANA FONKSİYON ---
 def main():
-    sidebar_info()
     model, cat_features, feature_names, df = load_model_and_data()
+    sidebar_info()
 
     pages = {
         "🏠 Ana Sayfa": lambda: home_page(df),
@@ -325,7 +343,8 @@ def main():
         "📈 Model Performansı": lambda: performance_page(df, model, cat_features, feature_names),
     }
 
-    choice = st.sidebar.selectbox("Sayfa Seçiniz", list(pages.keys()))
+    st.sidebar.title("Sayfalar")
+    choice = st.sidebar.radio("Gitmek istediğiniz sayfayı seçin:", list(pages.keys()))
     pages[choice]()
 
 if __name__ == "__main__":
