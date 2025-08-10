@@ -23,10 +23,10 @@ st.set_page_config(
 def load_data():
     """Temizlenmiş veri setini yükler."""
     try:
-        df = pd.read_csv("Prisongüncelveriseti.csv")
+        df = pd.read_csv("prison_app/Prisongüncelveriseti.csv")
         return df
     except FileNotFoundError:
-        st.error("Prisongüncelveriseti.csv dosyası bulunamadı. Lütfen dosyanın GitHub deponuzda ve uygulamanızla aynı dizinde olduğundan emin olun.")
+        st.error("Prisongüncelveriseti.csv dosyası bulunamadı. Lütfen dosyanın GitHub deponuzdaki 'prison_app' dizininde olduğundan emin olun.")
         return None
 
 @st.cache_resource
@@ -34,17 +34,17 @@ def load_model_and_preprocessors():
     """Modeli ve ön işleme dosyalarını yükler."""
     try:
         # CatBoost modelini yüklüyoruz.
-        model = pickle.load(open('catboost_model.pkl', 'rb'))
+        model = pickle.load(open('prison_app/catboost_model.pkl', 'rb'))
         
         # Ön işleme için gerekli dosyaları yüklüyoruz.
-        bool_columns = pickle.load(open('bool_columns.pkl', 'rb'))
-        cat_features = pickle.load(open('cat_features.pkl', 'rb'))
-        cat_unique_values = pickle.load(open('cat_unique_values.pkl', 'rb'))
-        feature_names = pickle.load(open('feature_names.pkl', 'rb'))
+        bool_columns = pickle.load(open('prison_app/bool_columns.pkl', 'rb'))
+        cat_features = pickle.load(open('prison_app/cat_features.pkl', 'rb'))
+        cat_unique_values = pickle.load(open('prison_app/cat_unique_values.pkl', 'rb'))
+        feature_names = pickle.load(open('prison_app/feature_names.pkl', 'rb'))
         
         return model, bool_columns, cat_features, cat_unique_values, feature_names
     except FileNotFoundError as e:
-        st.error(f"Gerekli model veya ön işleme dosyası bulunamadı: {e}. Lütfen tüm dosyaların GitHub deponuzda ve uygulamanızla aynı dizinde olduğundan emin olun.")
+        st.error(f"Gerekli model veya ön işleme dosyası bulunamadı: {e}. Lütfen tüm dosyaların GitHub deponuzdaki 'prison_app' dizininde olduğundan emin olun.")
         return None, None, None, None, None
 
 # Verileri ve modeli yüklüyoruz.
@@ -153,7 +153,7 @@ def prediction_model_page():
             'Prior_Arrest_Episodes_DVCharges': [prior_arrest_episodes_dvcharges],
             'Condition_MH_SA': [condition_mh_sa],
             'Percent_Days_Employed': [percent_days_employed],
-            'Jobs_Per_Year': [jobs_per_year] # Hata düzeltildi: jobs_per_per_year -> jobs_per_year
+            'Jobs_Per_Year': [jobs_per_year] 
         }
         input_df = pd.DataFrame(input_data)
         
