@@ -37,18 +37,40 @@ def load_data() -> pd.DataFrame | None:
             if p.exists():
                 df = pd.read_csv(p)
                 return df
-        except Exception:
-            # okuma hatası olsa diğer dosya yollarına bakar
+        except Exception as e:
+            st.warning(f"Veri yüklenirken hata oluştu: {e}")
             continue
     return None
 
 df = load_data()
 
 # -------------------------
-# Ana Sayfa içeriği
+# Demo veri seti oluşturucu
+# -------------------------
+def create_demo_data() -> pd.DataFrame:
+    demo = pd.DataFrame({
+        "suç_tipi": ["hırsızlık", "dolandırıcılık", "yaralama", "hırsızlık", "uyuşturucu", "dolandırıcılık", "dolandırıcılık"],
+        "ceza_ay": [6, 12, 24, 3, 18, 9, 6],
+        "egitim_durumu": ["lise", "ilkokul", "lise", "lise", "üniversite", "lise", "ilkokul"],
+        "gecmis_suc_sayisi": [0, 2, 1, 0, 3, 1, 2],
+        "il": ["Istanbul", "Ankara", "Izmir", "Istanbul", "Bursa", "Ankara", "Izmir"],
+        "Recidivism_Within_3years": [0, 1, 0, 0, 1, 0, 1]
+    })
+    return demo
+
+# -------------------------
+# Grafik çizme fonksiyonu
+# -------------------------
+def plot_top_categories(df: pd.DataFrame, col_name: str, top_n: int = 10):
+    counts = df[col_name].value_counts().nlargest(top_n).reset_index()
+    counts.columns = [col_name, "sayı"]
+    fig = px.bar(counts, x=col_name, y="sayı", title=f"En Sık {col_name} Türleri (Top {top_n})")
+    st.plotly_chart(fig, use_container_width=True)
+
+# -------------------------
+# Ana Sayfa
 # -------------------------
 def home_page():
-    # Başlık ve ikon
     st.title("🏛️ Yeniden Suç İşleme Tahmin Uygulaması")
     st.markdown(
         """
@@ -59,7 +81,6 @@ def home_page():
         risk analizi yaparak tekrar suç oranlarını azaltmaya katkı sağlamaktır.
         """
     )
-
     st.markdown(
         """
         **📌 Bu sayfada bulacaklarınız:**  
@@ -69,11 +90,8 @@ def home_page():
         - İleriye dönük adımlar  
         """
     )
-
     st.markdown("---")
 
-    # Özet metrikler
-    col1, col2, col3, col4 = st.columns(4)
     total_rows = df.shape[0] if df is not None else 0
     total_cols = df.shape[1] if df is not None else 0
     data_source = None
@@ -82,6 +100,7 @@ def home_page():
             data_source = str(p)
             break
 
+    col1, col2, col3, col4 = st.columns(4)
     col1.metric("📄 Veri Satırı", total_rows)
     col2.metric("📊 Sütun Sayısı", total_cols)
     col3.metric("💾 Veri Kaynağı", data_source or "Bulunamadı")
@@ -89,7 +108,6 @@ def home_page():
 
     st.markdown("---")
 
-    # Veri seti yoksa uyarı + demo
     if df is None:
         st.warning(
             """
@@ -100,60 +118,46 @@ def home_page():
             Şimdilik örnek bir **demo veri seti** gösterilmektedir.
             """
         )
-        demo = pd.DataFrame({
-            "suç_tipi": ["hırsızlık", "dolandırıcılık", "yaralama", "hırsızlık"],
-            "ceza_ay": [6, 12, 24, 3],
-            "egitim_durumu": ["lise", "ilkokul", "lise", "lise"],
-            "gecmis_suc_sayisi": [0, 2, 1, 0],
-            "il": ["Istanbul", "Ankara", "Izmir", "Istanbul"],
-            "Recidivism_Within_3years": [0, 1, 0, 0]
-        })
+        demo = create_demo_data()
         with st.expander("📂 Demo Veri Önizlemesi (İlk 10 Satır)"):
             st.dataframe(demo.head(10))
+        data_for_viz = demo
     else:
-        # Veri önizleme
         with st.expander("📂 Veri Seti Önizlemesi (İlk 10 Satır) — " + (data_source or "")):
             st.dataframe(df.head(10))
+        data_for_viz = df
 
-        # Hedef değişken analizi
-        target_candidates = [c for c in df.columns if "recidiv" in c.lower() or "recid" in c.lower()]
-        if target_candidates:
-            target = target_candidates[0]
-            try:
-                recid_rate = df[target].dropna().astype(float).mean()
-                st.markdown(f"**🎯 Hedef Sütun:** `{target}` — Ortalama yeniden suç işleme oranı: **{recid_rate:.2%}**")
-            except Exception:
-                st.info(f"Hedef sütun `{target}` bulundu fakat oran hesaplanamadı.")
-        else:
-            st.info("Hedef sütun (recidivism) otomatik olarak tespit edilemedi.")
+    # Hedef değişken analizi
+    target_candidates = [c for c in data_for_viz.columns if "recidiv" in c.lower() or "recid" in c.lower()]
+    if target_candidates:
+        target = target_candidates[0]
+        try:
+            recid_rate = data_for_viz[target].dropna().astype(float).mean()
+            st.markdown(f"**🎯 Hedef Sütun:** `{target}` — Ortalama yeniden suç işleme oranı: **{recid_rate:.2%}**")
+        except Exception:
+            st.info(f"Hedef sütun `{target}` bulundu fakat oran hesaplanamadı.")
+    else:
+        st.info("Hedef sütun (recidivism) otomatik olarak tespit edilemedi.")
 
-        # Görselleştirmeler
-        crime_cols = [c for c in df.columns if any(x in c.lower() for x in ("crime", "suç", "offense", "charge"))]
-        region_cols = [c for c in df.columns if any(x in c.lower() for x in ("il", "şehir", "city", "region"))]
+    # Görselleştirmeler
+    crime_cols = [c for c in data_for_viz.columns if any(x in c.lower() for x in ("crime", "suç", "offense", "charge"))]
+    region_cols = [c for c in data_for_viz.columns if any(x in c.lower() for x in ("il", "şehir", "city", "region"))]
 
-        viz1, viz2 = st.columns(2)
+    viz1, viz2 = st.columns(2)
 
-        if crime_cols:
-            with viz1:
-                top_col = crime_cols[0]
-                top_counts = df[top_col].value_counts().nlargest(10).reset_index()
-                top_counts.columns = [top_col, "sayı"]
-                fig = px.bar(top_counts, x=top_col, y="sayı", title=f"En Sık {top_col} Türleri (Top 10)")
-                st.plotly_chart(fig, use_container_width=True)
-        else:
-            with viz1:
-                st.info("Suç tipi bilgisi bulunamadı.")
+    if crime_cols:
+        with viz1:
+            plot_top_categories(data_for_viz, crime_cols[0])
+    else:
+        with viz1:
+            st.info("Suç tipi bilgisi bulunamadı.")
 
-        if region_cols:
-            with viz2:
-                reg = region_cols[0]
-                region_count = df[reg].value_counts().nlargest(10).reset_index()
-                region_count.columns = [reg, "sayı"]
-                fig2 = px.bar(region_count, x=reg, y="sayı", title=f"{reg} Bazlı Yoğunluk (Top 10)")
-                st.plotly_chart(fig2, use_container_width=True)
-        else:
-            with viz2:
-                st.info("Bölge bilgisi bulunamadı.")
+    if region_cols:
+        with viz2:
+            plot_top_categories(data_for_viz, region_cols[0])
+    else:
+        with viz2:
+            st.info("Bölge bilgisi bulunamadı.")
 
     st.markdown("---")
     st.header("🚀 Nasıl İlerlenir?")
@@ -164,19 +168,18 @@ def home_page():
         3. Model dosyanız yoksa, eğitim için özel bir **notebook** hazırlanabilir.  
         """
     )
-
     st.markdown("---")
     st.caption(f"📂 Repo: https://github.com/Yasinaslann/PrisonPredictApp • {APP_VERSION}")
 
 # -------------------------
-# Basit placeholder sayfalar (şimdilik)
+# Placeholder sayfalar
 # -------------------------
 def placeholder_page(name: str):
     st.title(name)
     st.info("Bu sayfa henüz hazırlanmadı. 'Ana Sayfa' tasarımını onayladıktan sonra aynı kalite/formatta bu sayfayı da oluşturacağım.")
 
 # -------------------------
-# Sol sidebar navigasyon
+# Sidebar navigasyon
 # -------------------------
 st.sidebar.title("Navigasyon")
 page = st.sidebar.radio(
@@ -192,4 +195,3 @@ elif page == "Tavsiye ve Profil Analizi":
     placeholder_page("💡 Tavsiye ve Profil Analizi (Hazırlanıyor)")
 elif page == "Model Analizleri ve Harita":
     placeholder_page("📈 Model Analizleri ve Harita (Hazırlanıyor)")
-
