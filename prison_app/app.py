@@ -24,7 +24,7 @@ FEATURES_FILE = BASE_DIR / "feature_names.pkl"
 CAT_UNIQUE_FILE = BASE_DIR / "cat_unique_values.pkl"
 DATA_FILE = BASE_DIR / "Prisongüncelveriseti.csv" # Veri seti dosyası
 
-# Karşılaştırma için Logistic Regression modeli
+# Karşılaştırma için Logistic Regression modeli ve kodlayıcıları
 LR_MODEL_FILE = BASE_DIR / "logistic_regression_model.pkl"
 
 # Özellik açıklamaları
@@ -53,33 +53,35 @@ def load_models_and_data():
         cat_unique_values = joblib.load(CAT_UNIQUE_FILE)
         df = pd.read_csv(DATA_FILE)
         
-        # --- Düzeltme: Logistic Regression için kategorik verileri kodlama ---
+        # --- Düzeltme: Logistic Regression için modeli ve kodlayıcıları yükle veya eğit ---
         try:
-            lr_model = joblib.load(LR_MODEL_FILE)
-        except FileNotFoundError:
-            st.warning("Logistic Regression modeli bulunamadı, yeni bir tane eğitiliyor.")
+            lr_model, lr_encoders = joblib.load(LR_MODEL_FILE)
+        except (FileNotFoundError, ValueError):
+            st.warning("Logistic Regression modeli bulunamadı veya eski formatta, yeni bir tane eğitiliyor.")
             X_for_lr = df[feature_names].copy()
             y = df["Recidivism_Within_3years"]
+            lr_encoders = {}
             
-            # LabelEncoder kullanarak kategorik özellikleri sayısal hale getir
+            # LabelEncoder kullanarak kategorik özellikleri sayısal hale getir ve kodlayıcıları kaydet
             for col in cat_features + bool_cols:
                 if col in X_for_lr.columns:
                     le = LabelEncoder()
                     X_for_lr[col] = le.fit_transform(X_for_lr[col])
+                    lr_encoders[col] = le
             
             lr_model = LogisticRegression(random_state=42, solver='liblinear')
             lr_model.fit(X_for_lr, y)
-            joblib.dump(lr_model, LR_MODEL_FILE)
+            joblib.dump((lr_model, lr_encoders), LR_MODEL_FILE) # Model ve kodlayıcıları birlikte kaydet
         # --- Düzeltme sonu ---
 
-        return model, lr_model, bool_cols, cat_features, feature_names, cat_unique_values, df
+        return model, lr_model, lr_encoders, bool_cols, cat_features, feature_names, cat_unique_values, df
     except FileNotFoundError as e:
         st.error(f"Hata: Gerekli dosyalardan biri bulunamadı: {e}. Lütfen dosyaların (model.pkl, .csv, vb.) uygulamanın dizininde olduğundan emin olun.")
         st.stop()
 
 # Uygulama başlangıcında tüm veriyi yükle
 try:
-    model, lr_model, bool_cols, cat_features, feature_names, cat_unique_values, df = load_models_and_data()
+    model, lr_model, lr_encoders, bool_cols, cat_features, feature_names, cat_unique_values, df = load_models_and_data()
 except Exception as e:
     st.error(f"Uygulama başlatılırken bir hata oluştu: {e}")
     st.stop()
@@ -89,21 +91,21 @@ def format_df_for_prediction(df_input):
     """
     CatBoost tahmini için DataFrame'i hazırlar.
     """
+    df_output = df_input.copy()
     for b in bool_cols:
-        if b in df_input.columns:
-            df_input[b] = df_input[b].astype(str)
-    return df_input
+        if b in df_output.columns:
+            df_output[b] = df_output[b].astype(str)
+    return df_output
 
-def format_df_for_lr(df_input):
+def format_df_for_lr(df_input, lr_encoders):
     """
     Logistic Regression tahmini için DataFrame'i hazırlar.
     """
     df_output = df_input.copy()
-    for col in cat_features + bool_cols:
+    for col in lr_encoders:
         if col in df_output.columns:
-            le = LabelEncoder()
-            le.fit(df[col].unique())
-            df_output[col] = le.transform(df_output[col])
+            # Eğitilmiş kodlayıcıyı kullanarak veriyi dönüştür
+            df_output[col] = lr_encoders[col].transform(df_output[col])
     return df_output
 
 # --- Sayfa fonksiyonları ---
@@ -246,7 +248,7 @@ def performance_page():
 
     st.markdown("---")
     st.subheader("Logistic Regression Model Performansı (Karşılaştırma)")
-    X_for_lr = format_df_for_lr(df[feature_names].copy())
+    X_for_lr = format_df_for_lr(df[feature_names].copy(), lr_encoders)
     y_pred_lr = lr_model.predict(X_for_lr)
     
     st.markdown("### Sınıflandırma Raporu (LR)")
