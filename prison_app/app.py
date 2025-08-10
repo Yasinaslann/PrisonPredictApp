@@ -1,17 +1,16 @@
 import streamlit as st
 
-# Sayfa başlığı
-st.set_page_config(
-    page_title="Prison Recidivism Prediction App",
-    page_icon="🚔",
-    layout="wide"
-)
+from pages import page_home, page_prediction, page_recommendations, page_eda
 
-# Sayfa seçimi
-menu = st.sidebar.radio(
-    "Menü",
-    ["🏠 Ana Sayfa", "🔮 Suç Tekrarı Tahmini", "📊 Tavsiye Sistemi ve Profil Analizi", "📈 Veri Analizi & Harita"]
-)
+PAGES = {
+    "Anasayfa": page_home,
+    "Tahmin": page_prediction,
+    "Tavsiye & Profil": page_recommendations,
+    "EDA & Harita": page_eda,
+}
+
+selection = st.sidebar.radio("Menü", list(PAGES.keys()))
+PAGES[selection].render()
 
 # ================== 1. ANA SAYFA ==================
 if menu == "🏠 Ana Sayfa":
@@ -49,3 +48,4 @@ elif menu == "📊 Tavsiye Sistemi ve Profil Analizi":
 elif menu == "📈 Veri Analizi & Harita":
     st.title("📈 Veri Analizi & Harita")
     st.write("Burada veri setine ait analizler, grafikler ve harita görselleri yer alacak.")
+
