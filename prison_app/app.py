@@ -1,399 +1,353 @@
-import streamlit as st
+# app.py
+import os
+import joblib
 import pandas as pd
 import numpy as np
+import streamlit as st
+import plotly.express as px
 import matplotlib.pyplot as plt
 import seaborn as sns
-import plotly.express as px
-import plotly.graph_objects as go
-from catboost import CatBoostClassifier, Pool
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import roc_auc_score, confusion_matrix, classification_report, precision_recall_curve, roc_curve, auc
 import shap
-import joblib
-import os
-import io
+from catboost import CatBoostClassifier, Pool
 from fpdf import FPDF
-import datetime
-import logging
+import base64
+from io import BytesIO
 
-# -----------------------------
-# CONFIGURATION & LOGGER SETUP
-# -----------------------------
+# --- AYARLAR ---
 
 st.set_page_config(
-    page_title="Hapisten Tahliye Sonrası Suç Tekrarı Tahmin Uygulaması",
-    page_icon="🔒",
+    page_title="🔒 Hapisten Tahliye Sonrası Suç Tekrarı Tahmin Uygulaması",
     layout="wide",
     initial_sidebar_state="expanded",
+    page_icon="🔒"
 )
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s :: %(levelname)s :: %(message)s')
-logger = logging.getLogger()
+# Dark theme için CSS (basit)
+def local_css():
+    st.markdown(
+        """
+        <style>
+        .css-1d391kg {background-color:#121212;}
+        .css-ffhzg2 {color:#e0e0e0;}
+        .stButton>button {background-color:#4e73df;color:#fff;}
+        .css-1v0mbdj {color:#e0e0e0;}
+        .css-18e3th9 {background-color:#1e1e1e;}
+        </style>
+        """, unsafe_allow_html=True)
 
-# -----------------------------
-# UTILITY FUNCTIONS
-# -----------------------------
+local_css()
+
+# --- VERİ YÜKLEME ---
 
 @st.cache_data(show_spinner=True)
-def load_data(csv_path: str) -> pd.DataFrame:
-    """
-    Load the encoded recidivism dataset from CSV.
-    """
+def load_data():
+    possible_files = ["Prisongüncelveriseti.csv", "NIJ_s_Recidivism_Encod_Update.csv"]
+    for f in possible_files:
+        if os.path.exists(f):
+            df = pd.read_csv(f)
+            return df
+    st.error("Veri dosyası bulunamadı! Lütfen 'Prisongüncelveriseti.csv' veya 'NIJ_s_Recidivism_Encod_Update.csv' dosyasını uygulama dizinine koyun.")
+    return None
+
+@st.cache_resource(show_spinner=True)
+def load_models_and_metadata():
+    # Model, özellik isimleri ve kategorik sütunlar
+    model = None
+    cat_features = []
+    feature_names = []
+    bool_cols = []
+    cat_unique_values = {}
+
+    # Dosyalar varsa yükle
     try:
-        df = pd.read_csv(csv_path)
-        logger.info(f"Dataset loaded with shape {df.shape}")
-        return df
-    except FileNotFoundError:
-        st.error(f"Dosya bulunamadı: {csv_path}. Lütfen dosya yolunu kontrol edin.")
-        st.stop()
+        model = joblib.load("catboost_model.pkl")
+    except Exception:
+        st.warning("Model dosyası yüklenemedi: catboost_model.pkl")
 
-def check_missing_values(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Returns a dataframe with counts of missing values per column.
-    """
-    missing = df.isnull().sum()
-    missing = missing[missing > 0]
-    return missing
+    try:
+        cat_features = joblib.load("cat_features.pkl")
+    except Exception:
+        st.warning("cat_features.pkl yüklenemedi.")
 
-def fill_missing_values(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Fill missing values with sensible defaults or imputations.
-    """
+    try:
+        feature_names = joblib.load("feature_names.pkl")
+    except Exception:
+        st.warning("feature_names.pkl yüklenemedi.")
+
+    try:
+        bool_cols = joblib.load("bool_columns.pkl")
+    except Exception:
+        st.warning("bool_columns.pkl yüklenemedi.")
+
+    try:
+        cat_unique_values = joblib.load("cat_unique_values.pkl")
+    except Exception:
+        st.warning("cat_unique_values.pkl yüklenemedi.")
+
+    return model, cat_features, feature_names, bool_cols, cat_unique_values
+
+
+# --- VERİ ÖN İŞLEME ---
+
+def clean_data(df):
+    df = df.copy()
+    # Eksik değerlere göre basit doldurma örneği
     for col in df.columns:
-        if df[col].dtype == 'O':
-            df[col].fillna('Unknown', inplace=True)
+        if df[col].dtype == 'O':  # kategorik
+            df[col].fillna("Unknown", inplace=True)
         else:
             df[col].fillna(df[col].median(), inplace=True)
     return df
 
-def encode_categoricals(df: pd.DataFrame, cat_features: list) -> pd.DataFrame:
-    """
-    One-hot encode or label encode categorical features as needed.
-    """
-    for col in cat_features:
-        if col in df.columns:
-            df[col] = df[col].astype(str)
-    return df
 
-def plot_missing_values(df: pd.DataFrame):
-    """
-    Visualize missing values by feature.
-    """
-    missing = check_missing_values(df)
-    if len(missing) == 0:
-        st.success("Veri setinde eksik değer bulunmamaktadır.")
-    else:
-        fig, ax = plt.subplots(figsize=(10, 5))
-        missing.plot(kind='bar', ax=ax, color='tomato')
-        ax.set_title("Eksik Değerlerin Özelliklere Göre Sayısı")
-        ax.set_ylabel("Eksik Değer Sayısı")
-        ax.set_xlabel("Özellikler")
-        st.pyplot(fig)
+# --- SAYFA: Ana Bilgilendirme ---
 
-def prepare_model(model_path: str):
-    """
-    Load the trained model from a .pkl file.
-    """
-    if not os.path.exists(model_path):
-        st.error(f"Model dosyası bulunamadı: {model_path}")
-        st.stop()
-    model = joblib.load(model_path)
-    logger.info(f"Model {model_path} yüklenmiştir.")
-    return model
+def home_page():
+    st.title("🔒 Hapisten Tahliye Sonrası Suç Tekrarı Tahmin Uygulaması")
+    st.markdown("""
+        Bu uygulama, mahkumların tahliye sonrası suç tekrarı yapıp yapmayacağını tahmin etmeye yönelik gelişmiş makine öğrenimi modelleri kullanır.
+        
+        **Amaç:** Toplumu korumak, kaynakları etkili kullanmak ve riskli bireyleri erken belirleyerek müdahale etmektir.
 
-def calculate_model_metrics(model, X, y):
-    """
-    Calculate and return various classification metrics.
-    """
-    y_pred = model.predict(X)
-    if hasattr(model, "predict_proba"):
-        y_proba = model.predict_proba(X)[:, 1]
-    else:
-        y_proba = model.predict(X)  # fallback for models without predict_proba
+        **Proje Özellikleri:**
+        - Gelişmiş CatBoost modeli ile yüksek doğruluk
+        - Kapsamlı veri keşfi ve filtreleme
+        - Etkileşimli grafikler ve tablolar
+        - Model performans analizleri
+        - SHAP açıklayıcı analiz
+        - PDF rapor indirme
+        - Modern ve kullanıcı dostu arayüz
+    """)
+    st.image("https://upload.wikimedia.org/wikipedia/commons/6/64/Justice_scales_icon.svg", width=150)
 
-    roc_auc = roc_auc_score(y, y_proba)
-    conf_mat = confusion_matrix(y, y_pred)
-    class_report = classification_report(y, y_pred, output_dict=True)
+# --- SAYFA: Veri Keşfi ---
 
-    precision, recall, thresholds = precision_recall_curve(y, y_proba)
-    pr_auc = auc(recall, precision)
+def data_exploration_page(df):
+    st.header("📊 Veri Keşfi ve Gelişmiş Analiz")
 
-    return {
-        "roc_auc": roc_auc,
-        "confusion_matrix": conf_mat,
-        "classification_report": class_report,
-        "precision": precision,
-        "recall": recall,
-        "pr_auc": pr_auc,
-        "y_pred": y_pred,
-        "y_proba": y_proba
-    }
+    # Veri filtreleme - interaktif
 
-def plot_roc_curve(y_true, y_proba):
-    """
-    Plot ROC curve using matplotlib.
-    """
-    fpr, tpr, _ = roc_curve(y_true, y_proba)
-    roc_auc = auc(fpr, tpr)
+    with st.expander("Veri Seti Özet Bilgileri"):
+        st.write("Toplam Kayıt Sayısı:", df.shape[0])
+        st.write("Özellik Sayısı:", df.shape[1])
+        st.write("Örnek Veri:")
+        st.dataframe(df.head(10))
 
+    st.markdown("---")
+
+    # Filtre seçenekleri
+    # Numerik kolonlar
+    numeric_cols = df.select_dtypes(include=["int64", "float64"]).columns.tolist()
+    cat_cols = df.select_dtypes(include=["object", "category"]).columns.tolist()
+
+    with st.sidebar.expander("Filtreleme Seçenekleri"):
+        st.markdown("### Sayısal Filtreler")
+        filters = {}
+        for col in numeric_cols:
+            min_val = float(df[col].min())
+            max_val = float(df[col].max())
+            selected_range = st.slider(f"{col} aralığı", min_val, max_val, (min_val, max_val))
+            filters[col] = selected_range
+
+        st.markdown("### Kategorik Filtreler")
+        for col in cat_cols:
+            unique_vals = list(df[col].dropna().unique())
+            selected_vals = st.multiselect(f"{col} seçimi", unique_vals, default=unique_vals)
+            filters[col] = selected_vals
+
+    # Filtre uygulama
+    df_filtered = df.copy()
+    for col, val in filters.items():
+        if col in numeric_cols:
+            df_filtered = df_filtered[(df_filtered[col] >= val[0]) & (df_filtered[col] <= val[1])]
+        elif col in cat_cols:
+            df_filtered = df_filtered[df_filtered[col].isin(val)]
+
+    st.markdown(f"### Filtrelenmiş Veri: {df_filtered.shape[0]} kayıt")
+
+    # Kategorik dağılımlar grafik
+    if st.checkbox("Kategorik Değişkenlerin Dağılımını Göster"):
+        selected_cat = st.selectbox("Kategori seçin", cat_cols)
+        fig = px.histogram(df_filtered, x=selected_cat, color=selected_cat, title=f"{selected_cat} Dağılımı")
+        st.plotly_chart(fig, use_container_width=True)
+
+    # Sayısal değişken dağılımları
+    if st.checkbox("Sayısal Değişkenlerin Histogramını Göster"):
+        selected_num = st.selectbox("Sayısal Değişken seçin", numeric_cols)
+        fig2 = px.histogram(df_filtered, x=selected_num, nbins=30, title=f"{selected_num} Histogramı")
+        st.plotly_chart(fig2, use_container_width=True)
+
+    # Korelasyon matrisi
+    if st.checkbox("Korelasyon Matrisini Göster"):
+        corr = df_filtered[numeric_cols].corr()
+        fig3, ax = plt.subplots(figsize=(10, 6))
+        sns.heatmap(corr, annot=True, fmt=".2f", cmap="coolwarm", ax=ax)
+        st.pyplot(fig3)
+
+# --- SAYFA: Tahmin ---
+
+def prediction_page(model, cat_features, feature_names, df):
+    st.header("🧠 Kişisel Suç Tekrarı Tahmin Modülü")
+
+    if model is None:
+        st.warning("Model yüklenemedi. Tahmin yapılamıyor.")
+        return
+
+    st.markdown("Lütfen aşağıdaki bilgileri eksiksiz doldurun.")
+
+    input_data = {}
+
+    # Kategorik ve sayısal feature'lara göre form oluştur
+    for feature in feature_names:
+        if feature in cat_features:
+            options = df[feature].dropna().unique().tolist()
+            input_data[feature] = st.selectbox(f"{feature} seçiniz", options)
+        else:
+            min_val = float(df[feature].min())
+            max_val = float(df[feature].max())
+            step = (max_val - min_val) / 100 if max_val != min_val else 1
+            if df[feature].dtype == 'int64':
+                input_data[feature] = st.slider(f"{feature} (int)", int(min_val), int(max_val), int(min_val))
+            else:
+                input_data[feature] = st.slider(f"{feature} (float)", float(min_val), float(max_val), float(min_val), step=step)
+
+    # Tahmin yap butonu
+    if st.button("Tahmin Et"):
+        # Dataframe oluştur
+        input_df = pd.DataFrame([input_data])
+        # Model için Pool objesi yarat
+        pool = Pool(input_df, cat_features=cat_features)
+
+        prediction = model.predict(pool)[0]
+        proba = model.predict_proba(pool)[0][1]  # 1. sınıf olasılığı
+
+        st.success(f"Tahmin Sonucu: {'Tekrar Suç İşler' if prediction == 1 else 'Tekrar Suç İşlemez'}")
+        st.info(f"Model Güveni: %{proba*100:.2f}")
+
+# --- SAYFA: Performans ---
+
+def performance_page(df, model, cat_features, feature_names):
+    st.header("📈 Model Performans ve Değerlendirme")
+
+    if model is None:
+        st.warning("Model yüklenemedi. Performans gösterilemiyor.")
+        return
+
+    # Hedef sütun
+    if "Recidivism" not in df.columns:
+        st.error("Hedef sütun (Recidivism) veri setinde bulunamadı!")
+        return
+
+    y_true = df["Recidivism"]
+    X = df[feature_names]
+
+    pool = Pool(X, y_true, cat_features=cat_features)
+
+    preds_proba = model.predict_proba(pool)[:, 1]
+
+    from sklearn.metrics import roc_auc_score, accuracy_score, confusion_matrix, classification_report
+
+    roc_auc = roc_auc_score(y_true, preds_proba)
+    accuracy = accuracy_score(y_true, model.predict(pool))
+
+    st.markdown(f"**ROC AUC Skoru:** {roc_auc:.4f}")
+    st.markdown(f"**Doğruluk (Accuracy):** {accuracy:.4f}")
+
+    # Confusion matrix
+    cm = confusion_matrix(y_true, model.predict(pool))
     fig, ax = plt.subplots()
-    ax.plot(fpr, tpr, color='darkorange', lw=2, label=f'ROC curve (area = {roc_auc:.3f})')
-    ax.plot([0,1], [0,1], color='navy', lw=2, linestyle='--')
-    ax.set_xlim([0.0,1.0])
-    ax.set_ylim([0.0,1.05])
-    ax.set_xlabel('False Positive Rate')
-    ax.set_ylabel('True Positive Rate')
-    ax.set_title('ROC Curve')
-    ax.legend(loc="lower right")
-    st.pyplot(fig)
-
-def plot_precision_recall_curve_func(precision, recall):
-    """
-    Plot Precision-Recall curve using matplotlib.
-    """
-    fig, ax = plt.subplots()
-    ax.plot(recall, precision, color='blue', lw=2)
-    ax.set_xlabel('Recall')
-    ax.set_ylabel('Precision')
-    ax.set_title('Precision-Recall Curve')
-    st.pyplot(fig)
-
-def plot_confusion_matrix(conf_mat):
-    """
-    Plot confusion matrix heatmap using seaborn.
-    """
-    fig, ax = plt.subplots()
-    sns.heatmap(conf_mat, annot=True, fmt='d', cmap='Blues', ax=ax)
+    sns.heatmap(cm, annot=True, fmt="d", cmap="Blues", ax=ax)
     ax.set_xlabel("Tahmin Edilen")
     ax.set_ylabel("Gerçek")
     ax.set_title("Confusion Matrix")
     st.pyplot(fig)
 
-def shap_summary_plot(model, X):
-    """
-    Compute and plot SHAP summary plot.
-    """
-    try:
-        explainer = shap.TreeExplainer(model)
-        shap_values = explainer.shap_values(X)
-        st.subheader("Özelliklerin Model Üzerindeki SHAP Etkisi")
-        shap.summary_plot(shap_values, X, plot_type="bar", show=False)
-        st.pyplot(bbox_inches='tight')
-    except Exception as e:
-        st.warning("SHAP grafik gösterimi sırasında hata oluştu.")
-        logger.error(f"SHAP plot error: {e}")
+    # Feature importance
+    st.subheader("Model Özellik Önem Düzeyi")
+    fi = model.get_feature_importance(type="FeatureImportance")
+    fi_df = pd.DataFrame({"Feature": feature_names, "Importance": fi})
+    fi_df = fi_df.sort_values("Importance", ascending=False)
 
-def save_prediction_history(predictions: list, filename: str = "prediction_history.csv"):
-    """
-    Save prediction history list as CSV.
-    """
-    df_hist = pd.DataFrame(predictions)
-    df_hist.to_csv(filename, index=False)
-    st.success(f"Tahmin geçmişi '{filename}' olarak kaydedildi.")
+    fig2 = px.bar(fi_df, x="Importance", y="Feature", orientation='h', title="Feature Importance")
+    st.plotly_chart(fig2, use_container_width=True)
 
-def download_csv(df: pd.DataFrame, filename: str, button_label: str):
-    """
-    Streamlit button to download DataFrame as CSV.
-    """
-    csv_data = df.to_csv(index=False).encode('utf-8')
-    st.download_button(
-        label=button_label,
-        data=csv_data,
-        file_name=filename,
-        mime='text/csv',
-    )
+# --- SAYFA: SHAP Açıklama ---
 
-def generate_pdf_report(prediction: dict, model_metrics: dict, filename="Recidivism_Prediction_Report.pdf"):
-    """
-    Create a PDF report summarizing prediction results and model performance.
-    """
-    pdf = FPDF()
-    pdf.add_page()
-    pdf.set_font("Arial", 'B', 16)
-    pdf.cell(0, 10, "Hapisten Tahliye Sonrası Suç Tekrarı Tahmin Raporu", 0, 1, 'C')
-    pdf.ln(10)
+def shap_analysis_page(df, model, cat_features, feature_names):
+    st.header("🔍 Model Açıklaması ve SHAP Analizleri")
 
-    pdf.set_font("Arial", size=12)
-    pdf.cell(0, 10, f"Tahmin Zamanı: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", 0, 1)
-    pdf.cell(0, 10, "Tahmin Sonuçları:", 0, 1)
-    for key, val in prediction.items():
-        pdf.cell(0, 10, f"{key}: {val}", 0, 1)
-
-    pdf.ln(10)
-    pdf.cell(0, 10, "Model Performans Özellikleri:", 0, 1)
-    for metric, score in model_metrics.items():
-        if isinstance(score, (float, int)):
-            pdf.cell(0, 10, f"{metric}: {score:.4f}", 0, 1)
-    pdf.output(filename)
-    st.success(f"PDF raporu '{filename}' olarak oluşturuldu.")
-
-# -----------------------------------
-# APP PAGES
-# -----------------------------------
-
-def page_home():
-    st.title("🔒 Hapisten Tahliye Sonrası Suç Tekrarı Tahmin Uygulaması")
-    st.markdown("""
-    Bu uygulama, hapisten tahliye olan kişilerin suç tekrarı yapma olasılığını tahmin etmeye yönelik geliştirilmiştir. 
-    Veri keşfi, model tahmini ve analiz bölümleri ile kapsamlı bir sistem sunar.
-    """)
-    st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/e/e8/Jail_icon.svg/1200px-Jail_icon.svg.png", width=300)
-    st.markdown("### Navigasyon menüsünden istediğiniz bölüme geçiş yapabilirsiniz.")
-
-def page_data_overview(df: pd.DataFrame):
-    st.header("📊 Veri Keşfi ve Detaylı Analiz")
-    st.markdown("Veri setinizin özelliklerini keşfedebilir, eksik değerleri ve dağılımları inceleyebilirsiniz.")
-    
-    st.subheader("Veri Genel Bilgileri")
-    st.write(df.info())
-    st.write("### İlk 5 Satır")
-    st.dataframe(df.head())
-
-    st.subheader("Eksik Değer Analizi")
-    plot_missing_values(df)
-
-    st.subheader("Sayısal Değişkenlerin Dağılımı")
-    num_cols = df.select_dtypes(include=[np.number]).columns.tolist()
-    col_select = st.multiselect("Görselleştirilecek sayısal değişkenleri seçin:", num_cols, default=num_cols[:3])
-
-    for col in col_select:
-        fig = px.histogram(df, x=col, nbins=30, title=f"{col} Dağılımı")
-        st.plotly_chart(fig)
-
-    st.subheader("Kategorik Değişkenlerin Dağılımı")
-    cat_cols = df.select_dtypes(include=['object', 'category']).columns.tolist()
-    cat_select = st.multiselect("Görselleştirilecek kategorik değişkenleri seçin:", cat_cols, default=cat_cols[:3])
-
-    for col in cat_select:
-        fig = px.bar(df[col].value_counts(), title=f"{col} Frekans Grafiği")
-        st.plotly_chart(fig)
-
-def page_prediction(df: pd.DataFrame, model_catboost, model_rf, cat_features: list, feature_names: list):
-    st.header("🧠 Kişisel Suç Tekrarı Tahmin Modülü")
-    st.markdown("Aşağıdaki alanları doldurarak tahmin yapabilirsiniz. Her alanın yanında açıklamalar mevcuttur.")
-
-    user_input = {}
-    for feature in feature_names:
-        if feature in cat_features:
-            unique_vals = df[feature].dropna().unique().tolist()
-            user_input[feature] = st.selectbox(f"{feature} seçiniz:", unique_vals)
-        else:
-            min_val = int(df[feature].min())
-            max_val = int(df[feature].max())
-            user_input[feature] = st.slider(f"{feature} değerini seçiniz:", min_val, max_val, int(df[feature].median()))
-
-    # Input DataFrame for model prediction
-    input_df = pd.DataFrame({k: [v] for k, v in user_input.items()})
-
-    # Prediction button
-    if st.button("Tahmin Yap"):
-        st.info("Tahmin işlemi başlatılıyor...")
-
-        # Preprocessing input_df if needed
-        for col in cat_features:
-            input_df[col] = input_df[col].astype(str)
-
-        # Prediction with CatBoost
-        pred_cb = model_catboost.predict(input_df)[0]
-        pred_prob_cb = model_catboost.predict_proba(input_df)[0][1]
-
-        # Prediction with RandomForest
-        pred_rf = model_rf.predict(input_df)[0]
-        pred_prob_rf = model_rf.predict_proba(input_df)[0][1]
-
-        st.subheader("📊 Tahmin Sonuçları")
-        st.markdown(f"**CatBoost Modeli:** Tahmini Suç Tekrarı: {'Evet' if pred_cb == 1 else 'Hayır'} (Olasılık: {pred_prob_cb:.3f})")
-        st.markdown(f"**RandomForest Modeli:** Tahmini Suç Tekrarı: {'Evet' if pred_rf == 1 else 'Hayır'} (Olasılık: {pred_prob_rf:.3f})")
-
-        # Kaydetme / geçmişe ekleme
-        if "pred_history" not in st.session_state:
-            st.session_state.pred_history = []
-        st.session_state.pred_history.append({
-            **user_input,
-            "Pred_CatBoost": pred_cb,
-            "Pred_Prob_CatBoost": pred_prob_cb,
-            "Pred_RandomForest": pred_rf,
-            "Pred_Prob_RandomForest": pred_prob_rf,
-            "Timestamp": datetime.datetime.now()
-        })
-
-        # Göster tahmin geçmişi tablosu
-        if st.checkbox("Tahmin Geçmişini Göster"):
-            hist_df = pd.DataFrame(st.session_state.pred_history)
-            st.dataframe(hist_df)
-            download_csv(hist_df, "tahmin_gecmisi.csv", "Tahmin Geçmişini CSV Olarak İndir")
-
-        # PDF Raporu oluşturma
-        if st.button("PDF Raporu Oluştur"):
-            latest_pred = st.session_state.pred_history[-1]
-            metrics_cb = calculate_model_metrics(model_catboost, df[feature_names], df["Recidivism"])
-            generate_pdf_report(latest_pred, metrics_cb)
-
-def page_model_performance(df: pd.DataFrame, model, feature_names: list):
-    st.header("📈 Model Performans ve Değerlendirme")
+    if model is None:
+        st.warning("Model yüklenemedi. SHAP analizleri yapılamıyor.")
+        return
 
     X = df[feature_names]
-    y = df["Recidivism"]
 
-    metrics = calculate_model_metrics(model, X, y)
+    pool = Pool(X, cat_features=cat_features)
 
-    st.subheader("ROC AUC Skoru")
-    st.write(f"{metrics['roc_auc']:.4f}")
-    plot_roc_curve(y, metrics['y_proba'])
+    explainer = shap.TreeExplainer(model)
+    shap_values = explainer.shap_values(X)
 
-    st.subheader("Precision-Recall Eğrisi")
-    plot_precision_recall_curve_func(metrics["precision"], metrics["recall"])
-    st.write(f"PR AUC Skoru: {metrics['pr_auc']:.4f}")
+    st.markdown("### SHAP Summary Plot")
+    fig, ax = plt.subplots(figsize=(12,6))
+    shap.summary_plot(shap_values, X, show=False)
+    st.pyplot(fig)
 
-    st.subheader("Confusion Matrix (Karışıklık Matrisi)")
-    plot_confusion_matrix(metrics["confusion_matrix"])
+    st.markdown("### SHAP Feature Importance (Bar)")
+    fig2, ax2 = plt.subplots(figsize=(10,6))
+    shap.summary_plot(shap_values, X, plot_type="bar", show=False)
+    st.pyplot(fig2)
 
-    st.subheader("Detaylı Sınıflandırma Raporu")
-    st.text(pd.DataFrame(metrics["classification_report"]).transpose())
+# --- SAYFA: PDF Rapor İndir ---
 
-    st.subheader("Özellik Önem Düzeyi (SHAP)")
-    shap_summary_plot(model, X)
+def generate_pdf_report(prediction, proba, input_data):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", size=12)
+    pdf.cell(0, 10, "Tahliye Sonrası Suç Tekrarı Tahmin Raporu", ln=True, align='C')
+    pdf.ln(10)
 
-def page_about():
-    st.header("📚 Proje Hakkında")
-    st.markdown("""
-    - Bu proje, hapisten tahliye sonrası suç tekrarını tahmin etmek için geliştirilmiştir.
-    - Gelişmiş makine öğrenimi modelleri kullanılarak detaylı analiz yapılmaktadır.
-    - Kullanıcı dostu arayüz ile veri keşfi, tahmin ve model performansı takip edilebilir.
-    - Proje kapsamlı, açık kaynaklı ve yatırım almaya adaydır.
-    - Github: https://github.com/Yasinaslann/PrisonPredictApp
-    """)
+    for key, val in input_data.items():
+        pdf.cell(0, 10, f"{key}: {val}", ln=True)
+    pdf.ln(10)
+    pdf.cell(0, 10, f"Tahmin Sonucu: {'Tekrar Suç İşler' if prediction == 1 else 'Tekrar Suç İşlemez'}", ln=True)
+    pdf.cell(0, 10, f"Model Güveni: %{proba*100:.2f}", ln=True)
 
-# ----------------------------------------
-# MAIN APP FUNCTION
-# ----------------------------------------
+    return pdf.output(dest='S').encode('latin-1')
+
+def pdf_download_button(prediction, proba, input_data):
+    pdf_bytes = generate_pdf_report(prediction, proba, input_data)
+    b64 = base64.b64encode(pdf_bytes).decode()
+    href = f'<a href="data:application/octet-stream;base64,{b64}" download="tahmin_raporu.pdf">📄 Tahmin Raporunu İndir</a>'
+    st.markdown(href, unsafe_allow_html=True)
+
+
+# --- ANA FONKSİYON ---
 
 def main():
-    # Sidebar navigasyon
     st.sidebar.title("🔒 Menü")
-    page = st.sidebar.radio(
-        "Sayfa Seçiniz:",
-        ["Ana Sayfa", "Veri Keşfi", "Tahmin", "Model Performansı", "Proje Hakkında"]
-    )
+    menu = ["Anasayfa", "Veri Keşfi", "Tahmin", "Model Performansı", "SHAP Açıklama"]
+    choice = st.sidebar.radio("Sayfa Seçiniz", menu)
 
-    # Veri ve modelleri yükle
-    df = load_data("NIJ_s_Recidivism_Encod_Update.csv")
-    cat_features = [ "Gender", "Race", "Education_Level", "Dependents", "Prison_Offense", "Residence_Changes"]
-    feature_names = [col for col in df.columns if col != "Recidivism"]
+    df = load_data()
+    if df is None:
+        st.stop()
 
-    model_catboost = prepare_model("catboost_model.pkl")
-    model_rf = prepare_model("randomforest_model.pkl")  # İstersen bu model senin için önceden eğitilmiş olmalı
+    model, cat_features, feature_names, bool_cols, cat_unique_values = load_models_and_metadata()
+    df = clean_data(df)
 
-    if page == "Ana Sayfa":
-        page_home()
-    elif page == "Veri Keşfi":
-        page_data_overview(df)
-    elif page == "Tahmin":
-        page_prediction(df, model_catboost, model_rf, cat_features, feature_names)
-    elif page == "Model Performansı":
-        page_model_performance(df, model_catboost, feature_names)
-    elif page == "Proje Hakkında":
-        page_about()
+    if choice == "Anasayfa":
+        home_page()
+    elif choice == "Veri Keşfi":
+        data_exploration_page(df)
+    elif choice == "Tahmin":
+        prediction_page(model, cat_features, feature_names, df)
+    elif choice == "Model Performansı":
+        performance_page(df, model, cat_features, feature_names)
+    elif choice == "SHAP Açıklama":
+        shap_analysis_page(df, model, cat_features, feature_names)
+    else:
+        st.write("Lütfen menüden bir sayfa seçiniz.")
+
 
 if __name__ == "__main__":
     main()
