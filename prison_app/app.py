@@ -43,7 +43,6 @@ def create_demo_data() -> pd.DataFrame:
         "Num_Distinct_Arrest_Crime_Types": [0, 2, 1, 0, 3, 1, 2],
         "Recidivism_Within_3years": [0, 1, 0, 0, 1, 0, 1]
     })
-    # demo'da eksik il olmadığı için coğrafi grafik koymadım
     return demo
 
 def show_basic_stats(df: pd.DataFrame):
@@ -51,17 +50,34 @@ def show_basic_stats(df: pd.DataFrame):
 
     col1, col2, col3, col4 = st.columns(4)
     try:
-        col1.metric("🗂️ Toplam Kayıt", df.shape[0])
-        col2.metric("📌 Farklı Suç Tipi", df["suç_tipi"].nunique())
-        col3.metric("⏳ Ortalama Ceza Süresi (ay)", round(df["ceza_ay"].mean(), 2))
+        total_records = df.shape[0]
+        unique_crimes = df["suç_tipi"].nunique() if "suç_tipi" in df.columns else None
+        avg_sentence = df["ceza_ay"].mean() if "ceza_ay" in df.columns else None
+
         recid_col_candidates = [c for c in df.columns if "recid" in c.lower()]
+        recid_rate = None
         if recid_col_candidates:
-            recid_rate = df[recid_col_candidates[0]].mean()
+            recid_col = recid_col_candidates[0]
+            recid_rate = df[recid_col].dropna().astype(float).mean()
+
+        col1.metric("🗂️ Toplam Kayıt", total_records)
+        if unique_crimes is not None:
+            col2.metric("📌 Farklı Suç Tipi", unique_crimes)
+        else:
+            col2.markdown("📌 Farklı Suç Tipi\n**Veri yok**")
+
+        if avg_sentence is not None and not pd.isna(avg_sentence):
+            col3.metric("⏳ Ortalama Ceza Süresi (ay)", round(avg_sentence, 2))
+        else:
+            col3.markdown("⏳ Ortalama Ceza Süresi (ay)\n**Veri yok**")
+
+        if recid_rate is not None and not pd.isna(recid_rate):
             col4.metric("⚠️ Yeniden Suç İşleme Oranı", f"{recid_rate:.2%}")
         else:
-            col4.metric("⚠️ Yeniden Suç İşleme Oranı", "Bilinmiyor")
-    except Exception:
-        st.info("Bazı istatistikler hesaplanamadı.")
+            col4.markdown("⚠️ Yeniden Suç İşleme Oranı\n**Veri yok**")
+
+    except Exception as e:
+        st.error(f"İstatistikler hesaplanırken hata oluştu: {e}")
 
 def plot_category_distribution(df: pd.DataFrame, col_name: str, title: str):
     counts = df[col_name].value_counts().reset_index()
@@ -113,7 +129,6 @@ def home_page():
             """
         )
         data_to_show = create_demo_data()
-        # demo'da ay cinsinden ceza süresi ekleyelim
         data_to_show["ceza_ay"] = data_to_show["Prison_Years"] * 12
         data_to_show["gecmis_suc_sayisi"] = data_to_show["Num_Distinct_Arrest_Crime_Types"]
         data_to_show["suç_tipi"] = data_to_show["Prison_Offense"]
@@ -148,7 +163,7 @@ def home_page():
             st.info("Geçmiş suç sayısı verisi mevcut değil.")
 
     with col2:
-        st.info("Coğrafi dağılım verisi bu veri setinde yok.")
+        st.info("📍 Bu veri setinde coğrafi (şehir veya bölge) bilgisi bulunmamaktadır, bu yüzden coğrafi dağılım grafiği gösterilemiyor.")
 
         if "ceza_ay" in data_to_show.columns:
             plot_histogram(data_to_show, "ceza_ay", "Ceza Süresi Dağılımı (Ay)")
