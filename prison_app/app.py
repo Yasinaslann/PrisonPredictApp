@@ -3,6 +3,7 @@ import streamlit as st
 import pandas as pd
 from pathlib import Path
 from datetime import datetime
+import plotly.express as px
 
 # -------------------------
 # Sayfa genel yapılandırması
@@ -45,6 +46,33 @@ def create_demo_data() -> pd.DataFrame:
     })
     return demo
 
+def show_basic_stats(df: pd.DataFrame):
+    st.subheader("📊 Veri Seti Temel İstatistikler")
+
+    col1, col2, col3, col4 = st.columns(4)
+    try:
+        col1.metric("🗂️ Toplam Kayıt", df.shape[0])
+        col2.metric("📌 Farklı Suç Tipi", df["suç_tipi"].nunique())
+        col3.metric("⏳ Ortalama Ceza Süresi (ay)", round(df["ceza_ay"].mean(), 2))
+        recid_col_candidates = [c for c in df.columns if "recid" in c.lower()]
+        if recid_col_candidates:
+            recid_rate = df[recid_col_candidates[0]].mean()
+            col4.metric("⚠️ Yeniden Suç İşleme Oranı", f"{recid_rate:.2%}")
+        else:
+            col4.metric("⚠️ Yeniden Suç İşleme Oranı", "Bilinmiyor")
+    except Exception:
+        st.info("Bazı istatistikler hesaplanamadı.")
+
+def plot_category_distribution(df: pd.DataFrame, col_name: str, title: str):
+    counts = df[col_name].value_counts().reset_index()
+    counts.columns = [col_name, "Sayısı"]
+    fig = px.bar(counts, x=col_name, y="Sayısı", title=title)
+    st.plotly_chart(fig, use_container_width=True)
+
+def plot_histogram(df: pd.DataFrame, col_name: str, title: str):
+    fig = px.histogram(df, x=col_name, nbins=20, title=title)
+    st.plotly_chart(fig, use_container_width=True)
+
 def home_page():
     st.title("🏛️ Yeniden Suç İşleme Tahmin Uygulaması")
     
@@ -72,7 +100,6 @@ def home_page():
 
         Veri seti, bu tür değişkenler üzerinden modelleme ve analizlere imkan verir.  
         Elinizde `Prisongüncelveriseti.csv` dosyası yoksa, demo veri seti kullanılacaktır.
-
         """
     )
 
@@ -90,8 +117,39 @@ def home_page():
     else:
         data_to_show = df
 
-    st.subheader("📂 Veri Seti Önizlemesi (İlk 10 Satır)")
-    st.dataframe(data_to_show.head(10))
+    with st.expander("📂 Veri Seti Önizlemesi (İlk 10 Satır)"):
+        st.dataframe(data_to_show.head(10))
+
+    show_basic_stats(data_to_show)
+
+    st.markdown("---")
+
+    # Grafiklar
+    st.subheader("📈 Veri Seti Görselleştirmeleri")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        if "suç_tipi" in data_to_show.columns:
+            plot_category_distribution(data_to_show, "suç_tipi", "Suç Tipi Dağılımı")
+        else:
+            st.info("Suç tipi verisi mevcut değil.")
+
+        if "gecmis_suc_sayisi" in data_to_show.columns:
+            plot_histogram(data_to_show, "gecmis_suc_sayisi", "Geçmiş Suç Sayısı Dağılımı")
+        else:
+            st.info("Geçmiş suç sayısı verisi mevcut değil.")
+
+    with col2:
+        if "il" in data_to_show.columns:
+            plot_category_distribution(data_to_show, "il", "Coğrafi Dağılım (İl Bazında)")
+        else:
+            st.info("İl bilgisi mevcut değil.")
+
+        if "ceza_ay" in data_to_show.columns:
+            plot_histogram(data_to_show, "ceza_ay", "Ceza Süresi Dağılımı (Ay)")
+        else:
+            st.info("Ceza süresi verisi mevcut değil.")
 
     st.markdown("---")
     st.caption(f"📂 Repo: https://github.com/Yasinaslann/PrisonPredictApp • {APP_VERSION}")
