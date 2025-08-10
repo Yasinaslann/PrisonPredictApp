@@ -15,7 +15,7 @@ CANDIDATE_PATHS = [
     Path("/mnt/data/Prisongüncelveriseti.csv")
 ]
 
-APP_VERSION = "v1.0 (Ana Sayfa)"
+APP_VERSION = "v1.1 (Ana Sayfa)"
 
 @st.cache_data(show_spinner=False)
 def load_data():
@@ -39,10 +39,8 @@ def home_page(df):
             <h1 style="font-weight: 800; color: #0b3d91; margin-bottom: 0.3rem;">🏛️ Yeniden Suç İşleme Tahmin Uygulaması</h1>
             <div style="font-size: 1.1rem; line-height: 1.6; color: #333;">
                 <h3 style="margin-bottom: 0.3rem; color: #1a237e;">Proje Amacı</h3>
-                <p>Bu uygulama, mahpusların tahliye sonrasında yeniden suç işleme riskini (recidivism)
-                veri bilimi ve makine öğrenmesi teknikleri ile tahmin etmeyi amaçlar.</p>
-                <p>Amaç, topluma yeniden uyum sürecini iyileştirecek stratejiler geliştirmek ve
-                risk analizi yaparak tekrar suç oranlarını azaltmaya katkı sağlamaktır.</p>
+                <p>Bu uygulama, mahpusların tahliye sonrasında yeniden suç işleme riskini (recidivism) veri bilimi ve makine öğrenmesi teknikleri ile tahmin etmeyi amaçlar.</p>
+                <p>Amaç, topluma yeniden uyum sürecini iyileştirecek stratejiler geliştirmek ve risk analizi yaparak tekrar suç oranlarını azaltmaya katkı sağlamaktır.</p>
 
                 <h3 style="margin-top: 1.2rem; margin-bottom: 0.3rem; color: #1a237e;">Veri Seti Hakkında</h3>
                 <p>Veri seti, mahpusların demografik bilgileri, ceza süreleri, geçmiş suç kayıtları ve yeniden suç işleme bilgilerini içermektedir.</p>
@@ -55,44 +53,39 @@ def home_page(df):
 
     st.markdown("---")
 
-    # --- Modern istatistik kartları ---
+    # --- Gelişmiş Modern İstatistik Kartları ---
     total_rows = df.shape[0] if df is not None else 0
     total_cols = df.shape[1] if df is not None else 0
     unique_offenses = df["Prison_Offense"].nunique() if df is not None and "Prison_Offense" in df.columns else 0
+    avg_sentence = f"{df['Sentence_Length_Months'].dropna().mean():.1f}" if df is not None and "Sentence_Length_Months" in df.columns else "N/A"
+    recid_rate = (df["Recidivism"].mean() if df is not None and "Recidivism" in df.columns else 0) * 100
+    avg_age = f"{df['Age_at_Release'].dropna().mean():.1f}" if df is not None and "Age_at_Release" in df.columns else "N/A"
 
-    cols = st.columns(3)
+    cols = st.columns(6)
 
     card_style = """
-        background-color: #e8f0fe;
-        border-radius: 12px;
-        padding: 1.8rem;
+        background-color: #e3f2fd;
+        border-radius: 14px;
+        padding: 1.5rem 1rem;
         text-align: center;
-        box-shadow: 0 6px 12px rgb(13 71 161 / 0.2);
+        box-shadow: 0 5px 15px rgb(3 155 229 / 0.25);
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         """
 
-    with cols[0]:
-        st.markdown(f"""
-        <div style="{card_style}">
-            <div style="font-size: 2.8rem; font-weight: 800; color: #0d47a1;">{total_rows:,}</div>
-            <div style="font-size: 1.2rem; color: #1565c0; font-weight: 700;">🗂️ Toplam Kayıt</div>
-        </div>
+    def render_card(col, number, label, emoji, color="#0d47a1"):
+        col.markdown(f"""
+            <div style="{card_style}">
+                <div style="font-size: 2.6rem; font-weight: 800; color: {color};">{number}</div>
+                <div style="font-size: 1.15rem; color: {color}; font-weight: 700;">{emoji} {label}</div>
+            </div>
         """, unsafe_allow_html=True)
 
-    with cols[1]:
-        st.markdown(f"""
-        <div style="{card_style}">
-            <div style="font-size: 2.8rem; font-weight: 800; color: #0d47a1;">{total_cols}</div>
-            <div style="font-size: 1.2rem; color: #1565c0; font-weight: 700;">📋 Sütun Sayısı</div>
-        </div>
-        """, unsafe_allow_html=True)
-
-    with cols[2]:
-        st.markdown(f"""
-        <div style="{card_style}">
-            <div style="font-size: 2.8rem; font-weight: 800; color: #0d47a1;">{unique_offenses}</div>
-            <div style="font-size: 1.2rem; color: #1565c0; font-weight: 700;">📌 Farklı Suç Tipi</div>
-        </div>
-        """, unsafe_allow_html=True)
+    render_card(cols[0], f"{total_rows:,}", "Toplam Kayıt", "🗂️")
+    render_card(cols[1], total_cols, "Sütun Sayısı", "📋")
+    render_card(cols[2], unique_offenses, "Farklı Suç Tipi", "📌")
+    render_card(cols[3], avg_sentence + " ay", "Ortalama Ceza Süresi", "⏳", "#1b5e20")
+    render_card(cols[4], f"{recid_rate:.1f}%", "Yeniden Suç İşleme Oranı", "⚠️", "#b71c1c")
+    render_card(cols[5], avg_age, "Ortalama Tahliye Yaşı", "👤", "#004d40")
 
     st.markdown("---")
 
@@ -127,13 +120,13 @@ def home_page(df):
                     title="3 Yıl İçinde Yeniden Suç İşleme Oranı",
                     color_discrete_sequence=px.colors.sequential.RdBu
                 )
-                fig.update_traces(textposition='inside', textinfo='percent+label')
+                fig.update_traces(textposition='inside', textinfo='percent+label', pull=[0, 0.1])
                 fig.update_layout(title_x=0.5, template="plotly_white")
                 st.plotly_chart(fig, use_container_width=True)
             else:
                 st.info("Yeniden suç işleme verisi bulunmamaktadır.")
         with col2:
-            st.markdown(info_icon("Bu grafik, tahliye sonrası mahpusların yeniden suç işleme durumunu yüzdesel olarak gösterir."))
+            st.markdown(info_icon("Bu pasta grafik, tahliye sonrası mahpusların yeniden suç işleme durumunu yüzdesel olarak gösterir. 'Tekrar Suç İşledi' dilimi öne çıkarılmıştır."))
 
         st.markdown("---")
 
