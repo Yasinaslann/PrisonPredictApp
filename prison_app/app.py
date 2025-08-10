@@ -10,23 +10,24 @@ from sklearn.metrics import classification_report, confusion_matrix
 from sklearn.linear_model import LogisticRegression
 import plotly.express as px
 import numpy as np
+from sklearn.preprocessing import LabelEncoder
 
-# Set page configuration for a wider layout
-st.set_page_config(layout="wide", page_title="Recidivism Prediction App")
+# Sayfa yapılandırmasını ayarla
+st.set_page_config(layout="wide", page_title="Suç Tekrarı Tahmin Uygulaması ⚖️", page_icon="📈")
 
-# File paths
+# Dosya yolları
 BASE_DIR = Path(__file__).parent
 MODEL_FILE = BASE_DIR / "catboost_model.pkl"
 BOOL_FILE = BASE_DIR / "bool_columns.pkl"
 CAT_FILE = BASE_DIR / "cat_features.pkl"
 FEATURES_FILE = BASE_DIR / "feature_names.pkl"
 CAT_UNIQUE_FILE = BASE_DIR / "cat_unique_values.pkl"
-DATA_FILE = BASE_DIR / "Prisongüncelveriseti.csv" # Dataset file
+DATA_FILE = BASE_DIR / "Prisongüncelveriseti.csv" # Veri seti dosyası
 
-# Assuming a simple LR model exists for comparison
+# Karşılaştırma için Logistic Regression modeli
 LR_MODEL_FILE = BASE_DIR / "logistic_regression_model.pkl"
 
-# Feature descriptions
+# Özellik açıklamaları
 FEATURE_DESCRIPTIONS = {
     "Gender": "Mahkumun cinsiyeti",
     "Race": "Mahkumun ırkı",
@@ -37,10 +38,13 @@ FEATURE_DESCRIPTIONS = {
     "Prior_Convictions": "Önceki Mahkumiyet Sayısı"
 }
 
-# --- Caching Functions for performance ---
+# --- Performans için önbelleğe alma fonksiyonları ---
 @st.cache_resource
 def load_models_and_data():
-    """Loads all models and data once for efficiency."""
+    """
+    Tüm modelleri ve veriyi bir kez yükler. Bu fonksiyon,
+    kullanıcı etkileşimlerinde yeniden yüklemeyi önlemek için önbelleğe alınmıştır.
+    """
     try:
         model = joblib.load(MODEL_FILE)
         bool_cols = joblib.load(BOOL_FILE)
@@ -48,42 +52,61 @@ def load_models_and_data():
         feature_names = joblib.load(FEATURES_FILE)
         cat_unique_values = joblib.load(CAT_UNIQUE_FILE)
         df = pd.read_csv(DATA_FILE)
-        # Assuming a pre-trained simple LR model for comparison
+        
+        # --- Düzeltme: Logistic Regression için kategorik verileri kodlama ---
         try:
             lr_model = joblib.load(LR_MODEL_FILE)
         except FileNotFoundError:
-            # Create a simple LR model on the fly if it doesn't exist for the example
             st.warning("Logistic Regression modeli bulunamadı, yeni bir tane eğitiliyor.")
-            X = df[feature_names].copy()
+            X_for_lr = df[feature_names].copy()
             y = df["Recidivism_Within_3years"]
-            for col in bool_cols:
-                if col in X.columns:
-                    X[col] = X[col].astype('category').cat.codes
+            
+            # LabelEncoder kullanarak kategorik özellikleri sayısal hale getir
+            for col in cat_features + bool_cols:
+                if col in X_for_lr.columns:
+                    le = LabelEncoder()
+                    X_for_lr[col] = le.fit_transform(X_for_lr[col])
+            
             lr_model = LogisticRegression(random_state=42, solver='liblinear')
-            lr_model.fit(X, y)
+            lr_model.fit(X_for_lr, y)
             joblib.dump(lr_model, LR_MODEL_FILE)
+        # --- Düzeltme sonu ---
 
         return model, lr_model, bool_cols, cat_features, feature_names, cat_unique_values, df
     except FileNotFoundError as e:
         st.error(f"Hata: Gerekli dosyalardan biri bulunamadı: {e}. Lütfen dosyaların (model.pkl, .csv, vb.) uygulamanın dizininde olduğundan emin olun.")
         st.stop()
 
-# Load everything at the start
+# Uygulama başlangıcında tüm veriyi yükle
 try:
     model, lr_model, bool_cols, cat_features, feature_names, cat_unique_values, df = load_models_and_data()
 except Exception as e:
     st.error(f"Uygulama başlatılırken bir hata oluştu: {e}")
     st.stop()
 
-# --- Shared UI Components ---
+# --- Paylaşılan Fonksiyonlar ---
 def format_df_for_prediction(df_input):
-    """Formats the input DataFrame for prediction."""
+    """
+    CatBoost tahmini için DataFrame'i hazırlar.
+    """
     for b in bool_cols:
         if b in df_input.columns:
             df_input[b] = df_input[b].astype(str)
     return df_input
 
-# --- Page functions ---
+def format_df_for_lr(df_input):
+    """
+    Logistic Regression tahmini için DataFrame'i hazırlar.
+    """
+    df_output = df_input.copy()
+    for col in cat_features + bool_cols:
+        if col in df_output.columns:
+            le = LabelEncoder()
+            le.fit(df[col].unique())
+            df_output[col] = le.transform(df_output[col])
+    return df_output
+
+# --- Sayfa fonksiyonları ---
 def prediction_page():
     st.title("🔮 Bireysel Risk Tahmini")
     st.write("Alanları doldurarak bir mahkumun suç tekrarı riskini tahmin edin.")
@@ -126,7 +149,6 @@ def prediction_page():
                 st.markdown(f"<h2 style='color:green;'>Düşük risk altında: Tekrar suç işleme olasılığı düşük.</h2>", unsafe_allow_html=True)
             st.write(f"Tahmin Olasılığı: **%{proba*100:.2f}**")
 
-            # SHAP Explanation
             st.subheader("Tahmin Açıklaması (SHAP)")
             st.write("Bu grafik, tahmin sonucunu en çok etkileyen faktörleri göstermektedir.")
             explainer = shap.TreeExplainer(model)
@@ -139,7 +161,6 @@ def prediction_page():
             st.pyplot(fig, bbox_inches='tight')
             plt.close(fig)
 
-            # Personal recommendation based on prediction
             st.subheader("Öneri")
             if pred == 1:
                 st.info("📌 Öneri: Eğitim programlarına katılmanız ve denetimli serbestlik programlarına dahil olmanız önerilir.")
@@ -153,7 +174,6 @@ def analysis_page():
     st.title("📊 Veri Analizi ve Görselleştirme")
     st.write("Veri setini filtreleyerek ve görselleştirerek suç tekrarı faktörlerini inceleyin.")
 
-    # Sidebar filters
     st.sidebar.header("Veri Filtreleri")
     age_column = "Age_at_Release"
     gender_column = "Gender"
@@ -183,7 +203,6 @@ def analysis_page():
 
     st.info(f"Filtrelenmiş Toplam Kayıt Sayısı: {filtered_df.shape[0]}")
 
-    # Class distribution
     st.subheader("Suç Tekrarı Sınıf Dağılımı")
     fig = px.histogram(filtered_df, x="Recidivism_Within_3years", color="Recidivism_Within_3years",
                        category_orders={"Recidivism_Within_3years": [0,1]},
@@ -191,7 +210,6 @@ def analysis_page():
                        title="Suç Tekrarı Sınıf Dağılımı")
     st.plotly_chart(fig, use_container_width=True)
 
-    # User selected feature chart
     st.subheader("Özelliklere Göre Dağılım")
     selected_feature = st.selectbox("Grafik için bir özellik seçin", options=feature_names)
 
@@ -208,12 +226,10 @@ def performance_page():
     st.write("Modelin tüm veri seti üzerindeki performans metriklerini inceleyin.")
 
     y_true = df["Recidivism_Within_3years"]
-    X = df[feature_names].copy()
-    X_for_predict = format_df_for_prediction(X)
     
-    # --- CatBoost Model Performance ---
     st.subheader("CatBoost Model Performansı")
-    y_pred_catboost = model.predict(X_for_predict)
+    X_for_catboost = format_df_for_prediction(df[feature_names].copy())
+    y_pred_catboost = model.predict(X_for_catboost)
     
     st.markdown("### Sınıflandırma Raporu (CatBoost)")
     report_dict_catboost = classification_report(y_true, y_pred_catboost, output_dict=True)
@@ -228,15 +244,10 @@ def performance_page():
     ax.set_ylabel("Gerçek")
     st.pyplot(fig)
 
-    # --- Logistic Regression Model Performance (for comparison) ---
     st.markdown("---")
     st.subheader("Logistic Regression Model Performansı (Karşılaştırma)")
-    X_lr = df[feature_names].copy()
-    for col in bool_cols:
-        if col in X_lr.columns:
-            X_lr[col] = X_lr[col].astype('category').cat.codes
-    
-    y_pred_lr = lr_model.predict(X_lr)
+    X_for_lr = format_df_for_lr(df[feature_names].copy())
+    y_pred_lr = lr_model.predict(X_for_lr)
     
     st.markdown("### Sınıflandırma Raporu (LR)")
     report_dict_lr = classification_report(y_true, y_pred_lr, output_dict=True)
@@ -255,8 +266,8 @@ def what_if_page():
     st.title("🧐 'Ne-Olursa-Ne-Olur?' Senaryo Analizi")
     st.write("Özellikleri değiştirerek tahmin sonucunun nasıl değiştiğini inceleyin.")
 
-    st.subheader("Varsayılan Özellikler")
-    # Use mean or mode values as a baseline
+    st.subheader("Senaryo Karşılaştırması")
+    
     baseline_data = {}
     for col in feature_names:
         if col in cat_features or col in bool_cols:
@@ -264,17 +275,17 @@ def what_if_page():
         else:
             baseline_data[col] = df[col].mean()
 
-    # Create a DataFrame for the baseline
     df_baseline = pd.DataFrame([baseline_data])
-
-    # Show baseline prediction
     baseline_pred_df = format_df_for_prediction(df_baseline.copy())
     baseline_proba = model.predict_proba(baseline_pred_df)[0][1]
-    st.info(f"**Varsayılan Durum:** Ortalama bir kişinin suç tekrarı olasılığı **%{baseline_proba*100:.2f}**'dir.")
 
-    st.subheader("Özellikleri Değiştirin")
+    st.markdown("---")
+    st.markdown("### Varsayılan Durum")
+    st.write("Ortalama özelliklere sahip bir birey.")
+    
     modified_data = baseline_data.copy()
-
+    st.markdown("---")
+    st.markdown("### Değiştirilmiş Senaryo")
     with st.form("what_if_form"):
         cols = st.columns(3)
         for i, col in enumerate(feature_names):
@@ -282,37 +293,47 @@ def what_if_page():
             with container:
                 help_text = FEATURE_DESCRIPTIONS.get(col, "Açıklama bulunmamaktadır.")
                 if col in bool_cols:
-                    v = st.selectbox(f"{col}", ["True", "False"], help=help_text, index=1 if modified_data[col] == "False" else 0)
+                    index = 1 if str(modified_data[col]) == "False" else 0
+                    v = st.selectbox(f"{col}", ["True", "False"], help=help_text, index=index, key=f"what_if_{col}")
                 elif col in cat_features:
                     options = cat_unique_values.get(col, [])
-                    v = st.selectbox(f"{col}", options, help=help_text, index=options.index(modified_data[col]))
+                    index = options.index(modified_data[col]) if modified_data[col] in options else 0
+                    v = st.selectbox(f"{col}", options, help=help_text, index=index, key=f"what_if_{col}")
                 else:
-                    v = st.slider(f"{col}", float(df[col].min()), float(df[col].max()), float(modified_data[col]), step=1.0)
+                    v = st.slider(f"{col}", float(df[col].min()), float(df[col].max()), float(modified_data[col]), step=1.0, key=f"what_if_{col}")
                 modified_data[col] = v
         
         submitted = st.form_submit_button("Analizi Yenile")
-    
+
     if submitted:
         df_modified = pd.DataFrame([modified_data])
         df_modified_for_predict = format_df_for_prediction(df_modified.copy())
         
         modified_proba = model.predict_proba(df_modified_for_predict)[0][1]
         
-        st.subheader("Yeni Tahmin Sonucu")
-        st.write(f"Değiştirilmiş özelliklerle suç tekrarı olasılığı: **%{modified_proba*100:.2f}**")
-
-        proba_change = modified_proba - baseline_proba
-        
+        st.markdown("---")
         st.subheader("Olasılık Değişimi")
+
+        col_base, col_modified, col_change = st.columns(3)
+        
+        col_base.metric("Varsayılan Olasılık", f"%{baseline_proba*100:.2f}")
+        col_modified.metric("Değiştirilmiş Olasılık", f"%{modified_proba*100:.2f}")
+
+        proba_change = (modified_proba - baseline_proba) * 100
+        
         if proba_change > 0:
-            st.success(f"Olasılık **%{proba_change*100:.2f}** arttı.")
+            col_change.metric("Değişim", f"↑ %{proba_change:.2f}", delta_color="inverse")
         elif proba_change < 0:
-            st.error(f"Olasılık **%{-proba_change*100:.2f}** azaldı.")
+            col_change.metric("Değişim", f"↓ %{-proba_change:.2f}", delta_color="normal")
         else:
-            st.info("Olasılıkta bir değişiklik olmadı.")
+            col_change.metric("Değişim", "0%")
+
 
 def main():
-    st.sidebar.title("App Menüsü")
+    st.sidebar.title("Menü")
+    st.sidebar.markdown("""
+    Bu uygulama, makine öğrenimi modelini kullanarak bireylerin suç tekrarı olasılığını tahmin etmek için tasarlanmıştır.
+    """)
     
     tabs = st.tabs(["🔮 Tahmin", "📊 Veri Analizi", "📈 Model Performansı", "🧐 Ne-Olursa-Ne-Olur?"])
 
