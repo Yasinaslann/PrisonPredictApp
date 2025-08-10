@@ -15,7 +15,7 @@ CANDIDATE_PATHS = [
     Path("/mnt/data/Prisongüncelveriseti.csv")
 ]
 
-APP_VERSION = "v1.4 (Ana Sayfa)"
+APP_VERSION = "v1.5 (Ana Sayfa)"
 
 @st.cache_data(show_spinner=False)
 def load_data():
@@ -35,43 +35,48 @@ def safe_mean(series):
     return pd.to_numeric(series, errors='coerce').dropna().mean()
 
 def render_card(col, number, label, emoji, color="#0d47a1"):
+    # Kart stilinde margin ve padding tam sıkı yapıldı, arada boşluk yok
     card_style = f"""
         background-color: #e3f2fd;
-        border-radius: 14px;
-        padding: 1.5rem 1rem;
+        border-radius: 12px 12px 0 0;
+        padding: 1.1rem 0;
         text-align: center;
-        box-shadow: 0 5px 15px rgb(3 155 229 / 0.25);
+        box-shadow: 0 3px 8px rgba(3, 155, 229, 0.25);
         font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        margin: 0;  /* Boşluk kaldırıldı */
-        """
+        margin: 0;
+        user-select: none;
+    """
+    number_style = f"font-size: 2.7rem; font-weight: 800; color: {color}; line-height:1;"
+    label_style = f"font-size: 1.1rem; color: {color}; font-weight: 700; margin-top: 0.1rem;"
+
     col.markdown(f"""
         <div style="{card_style}">
-            <div style="font-size: 2.6rem; font-weight: 800; color: {color};">{number}</div>
-            <div style="font-size: 1.15rem; color: {color}; font-weight: 700;">{emoji} {label}</div>
+            <div style="{number_style}">{number}</div>
+            <div style="{label_style}">{emoji} {label}</div>
         </div>
     """, unsafe_allow_html=True)
 
 def home_page(df):
-    # Üst kutu koyu mavi kutu
+    # Üst koyu mavi kutu - şık, modern, padding iyi ayarlı
     st.markdown(
         """
         <div style="
             background-color: #0d1b2a; 
             color: white; 
-            padding: 1.8rem 2rem; 
+            padding: 2rem 2.5rem; 
             border-radius: 15px; 
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            box-shadow: 0 6px 15px rgba(0,0,0,0.3);
-            margin-bottom: 1.5rem;
+            box-shadow: 0 7px 20px rgba(0,0,0,0.4);
+            margin-bottom: 2rem;
             ">
             <h1 style="margin-bottom: 0.3rem;">🏛️ Yeniden Suç İşleme Tahmin Uygulaması</h1>
             <h3 style="margin-top:0; color:#90caf9;">Proje Amacı</h3>
-            <p style="line-height:1.5; font-size:1.1rem;">
+            <p style="line-height:1.6; font-size:1.15rem; max-width:850px;">
                 Bu uygulama, mahpusların tahliye sonrasında yeniden suç işleme riskini (recidivism) veri bilimi ve makine öğrenmesi teknikleri ile tahmin etmeyi amaçlar.<br>
                 Amaç, topluma yeniden uyum sürecini iyileştirecek stratejiler geliştirmek ve risk analizi yaparak tekrar suç oranlarını azaltmaya katkı sağlamaktır.
             </p>
-            <h3 style="margin-top: 1.5rem; color:#90caf9;">Veri Seti Hakkında</h3>
-            <p style="line-height:1.5; font-size:1.1rem;">
+            <h3 style="margin-top: 1.8rem; color:#90caf9;">Veri Seti Hakkında</h3>
+            <p style="line-height:1.6; font-size:1.15rem; max-width:850px;">
                 Veri seti, mahpusların demografik bilgileri, ceza süreleri, geçmiş suç kayıtları ve yeniden suç işleme bilgilerini içermektedir.<br>
                 Bu bilgilerle risk faktörleri analiz edilip, model geliştirme için zengin bir kaynak sağlanmıştır.
             </p>
@@ -82,7 +87,7 @@ def home_page(df):
 
     st.markdown("---")
 
-    # İstatistik kartlar (boşluk yok)
+    # Kartlar - 8 kart, yan yana ve tam yapışık, padding/margin minimal
     total_rows = df.shape[0] if df is not None else 0
     total_cols = df.shape[1] if df is not None else 0
     unique_offenses = df["Prison_Offense"].nunique() if df is not None and "Prison_Offense" in df.columns else 0
@@ -92,12 +97,7 @@ def home_page(df):
     unique_education = df["Education_Level"].nunique() if df is not None and "Education_Level" in df.columns else 0
     unique_genders = df["Gender"].nunique() if df is not None and "Gender" in df.columns else 0
 
-    # Yeni ilgi çekici kartlar ekliyorum (örnek):
-    # - Eğitim seviyelerinin ortalama ceza süresine etkisi (basit ortalama)
-    # - Cinsiyete göre ortalama yeniden suç oranı
-    # Bunları ekleyelim sadece değer varsa.
-
-    cols = st.columns(8)  # 8 tane kolon olacak, boşluk yok.
+    cols = st.columns(8, gap="small")  # 'gap="small"' minimize edilmiş boşluk
 
     render_card(cols[0], f"{total_rows:,}", "Toplam Kayıt", "🗂️")
     render_card(cols[1], total_cols, "Sütun Sayısı", "📋")
@@ -120,31 +120,25 @@ def home_page(df):
 
     st.markdown("---")
 
-    # Veri seti önizlemesi modern, eşit kolonlu ve farklı temalar
+    # Veri seti önizlemesi - tam genişlikte, açılır kapanır, modern tema + yazı büyüklüğü
     st.subheader("📂 Veri Seti Önizlemesi")
-
-    preview_cols = st.columns(2)
-
-    with preview_cols[0]:
-        st.markdown("**📋 İlk 10 Satır (Standart Tablo)**")
-        st.dataframe(df.head(10), use_container_width=True)
-
-    with preview_cols[1]:
-        st.markdown("**🎨 İlk 10 Satır (Renkli Stil)**")
-        st.write(
-            df.head(10).style
-            .background_gradient(cmap='PuBu')
-            .set_properties(**{'font-family': 'Segoe UI', 'font-size': '12pt'})
-        )
+    with st.expander("Veri Setini Göster / Gizle", expanded=True):
+        st.dataframe(df.style.set_table_styles([
+            {'selector': 'thead tr th', 'props': [('background-color', '#0d47a1'), ('color', 'white'), ('font-size', '14px')]},
+            {'selector': 'tbody tr:nth-child(even)', 'props': [('background-color', '#e3f2fd')]},
+            {'selector': 'tbody tr:nth-child(odd)', 'props': [('background-color', 'white')]},
+            {'selector': 'tbody tr:hover', 'props': [('background-color', '#bbdefb')]},
+            {'selector': 'td', 'props': [('font-family', "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif"), ('font-size', '13px'), ('padding', '8px 12px')]},
+        ]), height=360, use_container_width=True)
 
     st.markdown("---")
 
     recid_col = next((c for c in df.columns if "recid" in c.lower()), None)
 
-    # Grafikler
+    # Grafikler - modern ve interaktif, pasta grafikte slice animasyonu, bar grafikte renkler ve tooltipler
 
     st.subheader("🎯 Yeniden Suç İşleme Oranı (Pasta Grafiği)")
-    col1, col2 = st.columns([3,1])
+    col1, col2 = st.columns([3, 1], gap="small")
     with col1:
         if recid_col and recid_col in df.columns:
             counts = df[recid_col].value_counts().sort_index()
@@ -153,9 +147,15 @@ def home_page(df):
             fig = px.pie(
                 names=labels, values=values,
                 title="3 Yıl İçinde Yeniden Suç İşleme Oranı",
-                color_discrete_sequence=px.colors.sequential.RdBu
+                color_discrete_sequence=px.colors.sequential.Blues
             )
-            fig.update_traces(textposition='inside', textinfo='percent+label', pull=[0, 0.1])
+            fig.update_traces(
+                textposition='inside',
+                textinfo='percent+label',
+                pull=[0, 0.1],
+                hoverinfo='label+percent+value',
+                marker=dict(line=dict(color='#000000', width=1))
+            )
             fig.update_layout(title_x=0.5, template="plotly_white")
             st.plotly_chart(fig, use_container_width=True)
         else:
@@ -167,7 +167,7 @@ def home_page(df):
 
     st.subheader("👥 Demografik Dağılımlar ve Yeniden Suç İşleme Oranları")
     demo_cols = ["Gender", "Education_Level"]
-    cols = st.columns(len(demo_cols))
+    cols = st.columns(len(demo_cols), gap="small")
     for idx, col_name in enumerate(demo_cols):
         with cols[idx]:
             if col_name in df.columns:
@@ -179,7 +179,12 @@ def home_page(df):
                     color=counts.index,
                     color_discrete_sequence=px.colors.qualitative.Safe
                 )
-                fig_bar.update_layout(showlegend=False, template="plotly_white", title_x=0.5)
+                fig_bar.update_layout(
+                    showlegend=False,
+                    template="plotly_white",
+                    title_x=0.5,
+                    margin=dict(t=40, b=30)
+                )
                 st.plotly_chart(fig_bar, use_container_width=True)
 
                 if recid_col:
@@ -191,7 +196,13 @@ def home_page(df):
                         color=recid_means.index,
                         color_discrete_sequence=px.colors.qualitative.Safe
                     )
-                    fig_recid.update_layout(showlegend=False, template="plotly_white", title_x=0.5, yaxis=dict(range=[0,1]))
+                    fig_recid.update_layout(
+                        showlegend=False,
+                        template="plotly_white",
+                        title_x=0.5,
+                        yaxis=dict(range=[0, 1]),
+                        margin=dict(t=40, b=30)
+                    )
                     st.plotly_chart(fig_recid, use_container_width=True)
             else:
                 st.info(f"{col_name} verisi bulunamadı.")
@@ -215,7 +226,7 @@ def home_page(df):
         corr_df.columns = ["Özellik", "Recidivism Korelasyonu"]
         corr_df = corr_df.sort_values(by="Recidivism Korelasyonu", key=abs, ascending=False)
 
-        c1, c2 = st.columns([3,1])
+        c1, c2 = st.columns([3, 1], gap="small")
         with c1:
             fig_corr = px.bar(
                 corr_df, x="Özellik", y="Recidivism Korelasyonu",
@@ -223,7 +234,11 @@ def home_page(df):
                 color_continuous_scale=px.colors.diverging.RdBu,
                 title="Özelliklerin Yeniden Suç İşleme ile Korelasyonu"
             )
-            fig_corr.update_layout(template="plotly_white", title_x=0.5)
+            fig_corr.update_layout(
+                template="plotly_white",
+                title_x=0.5,
+                margin=dict(t=40, b=30)
+            )
             st.plotly_chart(fig_corr, use_container_width=True)
         with c2:
             st.markdown(info_icon("Sayısal özelliklerin yeniden suç işleme ile korelasyonunu gösterir."))
