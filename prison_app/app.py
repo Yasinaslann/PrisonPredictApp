@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import numpy as np
 from pathlib import Path
 
 st.set_page_config(
@@ -33,65 +32,71 @@ def info_icon(text):
     return f"ℹ️ {text}"
 
 def home_page(df):
-    st.title("🏛️ Yeniden Suç İşleme Tahmin Uygulaması")
-
-    # --- Üst metin ---
+    # --- Üst metin şık modern ---
     st.markdown(
         """
-        ### Proje Amacı  
-        Bu uygulama, **mahpusların tahliye sonrasında yeniden suç işleme riskini** (recidivism)  
-        **veri bilimi ve makine öğrenmesi teknikleri** ile tahmin etmeyi amaçlar.  
-        Amaç, topluma yeniden uyum sürecini iyileştirecek stratejiler geliştirmek ve  
-        risk analizi yaparak tekrar suç oranlarını azaltmaya katkı sağlamaktır.
-        """
-    )
+        <div style="padding: 1rem 0;">
+            <h1 style="font-weight: 800; color: #0b3d91; margin-bottom: 0.3rem;">🏛️ Yeniden Suç İşleme Tahmin Uygulaması</h1>
+            <div style="font-size: 1.1rem; line-height: 1.6; color: #333;">
+                <h3 style="margin-bottom: 0.3rem; color: #1a237e;">Proje Amacı</h3>
+                <p>Bu uygulama, mahpusların tahliye sonrasında yeniden suç işleme riskini (recidivism)
+                veri bilimi ve makine öğrenmesi teknikleri ile tahmin etmeyi amaçlar.</p>
+                <p>Amaç, topluma yeniden uyum sürecini iyileştirecek stratejiler geliştirmek ve
+                risk analizi yaparak tekrar suç oranlarını azaltmaya katkı sağlamaktır.</p>
 
-    st.markdown(
-        """
-        ### Veri Seti Hakkında  
-        Veri seti, mahpusların demografik bilgileri, ceza süreleri, geçmiş suç kayıtları ve yeniden suç işleme bilgilerini içermektedir.  
-        Bu bilgilerle risk faktörleri analiz edilip, model geliştirme için zengin bir kaynak sağlanmıştır.
-        """
+                <h3 style="margin-top: 1.2rem; margin-bottom: 0.3rem; color: #1a237e;">Veri Seti Hakkında</h3>
+                <p>Veri seti, mahpusların demografik bilgileri, ceza süreleri, geçmiş suç kayıtları ve yeniden suç işleme bilgilerini içermektedir.</p>
+                <p>Bu bilgilerle risk faktörleri analiz edilip, model geliştirme için zengin bir kaynak sağlanmıştır.</p>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True
     )
-
-    if df is None:
-        st.warning(
-            """
-            **Veri seti yüklenemedi.**  
-            `Prisongüncelveriseti.csv` dosyasını aşağıdaki dizinlerden birine ekleyin:  
-            - `prison_app/`  
-            - `/mnt/data/`  
-            Şimdilik örnek bir **demo veri seti** gösterilmektedir.
-            """
-        )
-        df = pd.DataFrame({
-            "Gender": ["Male", "Female", "Male", "Female"],
-            "Education_Level": ["High School", "Elementary", "High School", "Elementary"],
-            "Recidivism_Within_3years": [1, 0, 0, 1],
-            "Prison_Offense": ["Theft", "Fraud", "Assault", "Theft"],
-            "Prison_Years": ["Less than 1 year", "1-2 years", "More than 3 years", "1-2 years"],
-            "Num_Distinct_Arrest_Crime_Types": [2, 1, 3, 0]
-        })
 
     st.markdown("---")
 
-    # --- Veri seti temel istatistikler ---
-    st.subheader("📊 Veri Seti Temel İstatistikler")
-    col1, col2, col3 = st.columns(3)
+    # --- Modern istatistik kartları ---
+    total_rows = df.shape[0] if df is not None else 0
+    total_cols = df.shape[1] if df is not None else 0
+    unique_offenses = df["Prison_Offense"].nunique() if df is not None and "Prison_Offense" in df.columns else 0
 
-    with col1:
-        total_rows = df.shape[0]
-        st.metric("🗂️ Toplam Kayıt", total_rows)
-    with col2:
-        total_cols = df.shape[1]
-        st.metric("📋 Sütun Sayısı", total_cols)
-    with col3:
-        unique_offenses = df["Prison_Offense"].nunique() if "Prison_Offense" in df.columns else "Bilinmiyor"
-        st.metric("📌 Farklı Suç Tipi", unique_offenses)
+    cols = st.columns(3)
+
+    card_style = """
+        background-color: #e3f2fd;
+        border-radius: 12px;
+        padding: 1.5rem;
+        text-align: center;
+        box-shadow: 0 4px 10px rgb(3 155 229 / 0.3);
+        """
+
+    with cols[0]:
+        st.markdown(f"""
+        <div style="{card_style}">
+            <div style="font-size: 2.5rem; font-weight: 700; color: #0d47a1;">{total_rows:,}</div>
+            <div style="font-size: 1.1rem; color: #1976d2; font-weight: 600;">🗂️ Toplam Kayıt</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with cols[1]:
+        st.markdown(f"""
+        <div style="{card_style}">
+            <div style="font-size: 2.5rem; font-weight: 700; color: #0d47a1;">{total_cols}</div>
+            <div style="font-size: 1.1rem; color: #1976d2; font-weight: 600;">📋 Sütun Sayısı</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with cols[2]:
+        st.markdown(f"""
+        <div style="{card_style}">
+            <div style="font-size: 2.5rem; font-weight: 700; color: #0d47a1;">{unique_offenses}</div>
+            <div style="font-size: 1.1rem; color: #1976d2; font-weight: 600;">📌 Farklı Suç Tipi</div>
+        </div>
+        """, unsafe_allow_html=True)
 
     st.markdown("---")
 
-    # --- Veri seti ön izlemesi ---
+    # --- Veri seti önizlemesi ---
     with st.expander("📂 Veri Seti Önizlemesi (İlk 10 Satır)"):
         st.dataframe(df.head(10))
 
