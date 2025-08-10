@@ -33,12 +33,28 @@ def load_data() -> pd.DataFrame | None:
             st.warning(f"Veri yüklenirken hata oluştu: {e}")
     return None
 
-df = load_data()
+def convert_sentence_length(val):
+    if pd.isna(val):
+        return None
+    val = str(val).strip().lower()
+    if val == "less than 1 year":
+        return 0.5
+    elif val == "1-2 years":
+        return 1.5
+    elif val == "greater than 2 to 3 years":
+        return 2.5
+    elif val == "more than 3 years":
+        return 4
+    else:
+        try:
+            return float(val)
+        except:
+            return None
 
 def create_demo_data() -> pd.DataFrame:
     demo = pd.DataFrame({
         "Prison_Offense": ["hırsızlık", "dolandırıcılık", "yaralama", "hırsızlık", "uyuşturucu", "dolandırıcılık", "dolandırıcılık"],
-        "Prison_Years": [0.5, 1, 2, 0.25, 1.5, 0.75, 0.5],
+        "Prison_Years": ["0.5", "1", "2", "0.25", "1.5", "0.75", "0.5"],
         "Education_Level": ["lise", "ilkokul", "lise", "lise", "üniversite", "lise", "ilkokul"],
         "Num_Distinct_Arrest_Crime_Types": [0, 2, 1, 0, 3, 1, 2],
         "Recidivism_Within_3years": [0, 1, 0, 0, 1, 0, 1]
@@ -52,7 +68,7 @@ def show_basic_stats(df: pd.DataFrame):
     try:
         total_records = df.shape[0]
         unique_crimes = df["suç_tipi"].nunique() if "suç_tipi" in df.columns else None
-        avg_sentence = df["ceza_ay"].mean() if "ceza_ay" in df.columns else None
+        avg_sentence = df["ceza_yil_sayisal"].mean() if "ceza_yil_sayisal" in df.columns else None
 
         recid_col_candidates = [c for c in df.columns if "recid" in c.lower()]
         recid_rate = None
@@ -67,9 +83,9 @@ def show_basic_stats(df: pd.DataFrame):
             col2.markdown("📌 Farklı Suç Tipi\n**Veri yok**")
 
         if avg_sentence is not None and not pd.isna(avg_sentence):
-            col3.metric("⏳ Ortalama Ceza Süresi (ay)", round(avg_sentence, 2))
+            col3.metric("⏳ Ortalama Ceza Süresi (yıl)", round(avg_sentence, 2))
         else:
-            col3.markdown("⏳ Ortalama Ceza Süresi (ay)\n**Veri yok**")
+            col3.markdown("⏳ Ortalama Ceza Süresi (yıl)\n**Veri yok**")
 
         if recid_rate is not None and not pd.isna(recid_rate):
             col4.metric("⚠️ Yeniden Suç İşleme Oranı", f"{recid_rate:.2%}")
@@ -108,7 +124,7 @@ def home_page():
         Veri setinde yer alan bazı temel değişkenler şunlardır:  
 
         - **Prison_Offense:** Mahpusların işlediği suçların kategorileri  
-        - **Prison_Years:** Hapis cezasının yıl cinsinden uzunluğu  
+        - **Prison_Years:** Hapis cezasının uzunluğu (bazı kategorik ifadeler sayısala çevrildi)  
         - **Education_Level:** Mahpusların eğitim seviyeleri  
         - **Num_Distinct_Arrest_Crime_Types:** Daha önce işlenen farklı suç türlerinin sayısı  
         - **Recidivism_Within_3years:** Tahliye sonrası 3 yıl içinde yeniden suç işleyip işlemediği (1=Evet, 0=Hayır)  
@@ -129,16 +145,17 @@ def home_page():
             """
         )
         data_to_show = create_demo_data()
-        data_to_show["ceza_ay"] = data_to_show["Prison_Years"] * 12
-        data_to_show["gecmis_suc_sayisi"] = data_to_show["Num_Distinct_Arrest_Crime_Types"]
-        data_to_show["suç_tipi"] = data_to_show["Prison_Offense"]
-        data_to_show["egitim_durumu"] = data_to_show["Education_Level"]
+        data_to_show["Prison_Years"] = data_to_show["Prison_Years"].astype(str)
     else:
         data_to_show = df.copy()
-        data_to_show["ceza_ay"] = data_to_show["Prison_Years"] * 12
-        data_to_show["gecmis_suc_sayisi"] = data_to_show["Num_Distinct_Arrest_Crime_Types"]
-        data_to_show["suç_tipi"] = data_to_show["Prison_Offense"]
-        data_to_show["egitim_durumu"] = data_to_show["Education_Level"]
+        data_to_show["Prison_Years"] = data_to_show["Prison_Years"].astype(str)
+
+    # Ceza süresi sayısal dönüşümü
+    data_to_show["ceza_yil_sayisal"] = data_to_show["Prison_Years"].apply(convert_sentence_length)
+
+    # Kolonları kolay kullanmak için kısaltmalar
+    data_to_show["suç_tipi"] = data_to_show["Prison_Offense"] if "Prison_Offense" in data_to_show.columns else None
+    data_to_show["gecmis_suc_sayisi"] = data_to_show["Num_Distinct_Arrest_Crime_Types"] if "Num_Distinct_Arrest_Crime_Types" in data_to_show.columns else None
 
     with st.expander("📂 Veri Seti Önizlemesi (İlk 10 Satır)"):
         st.dataframe(data_to_show.head(10))
@@ -152,12 +169,12 @@ def home_page():
     col1, col2 = st.columns(2)
 
     with col1:
-        if "suç_tipi" in data_to_show.columns:
+        if data_to_show["suç_tipi"] is not None:
             plot_category_distribution(data_to_show, "suç_tipi", "Suç Tipi Dağılımı")
         else:
             st.info("Suç tipi verisi mevcut değil.")
 
-        if "gecmis_suc_sayisi" in data_to_show.columns:
+        if data_to_show["gecmis_suc_sayisi"] is not None:
             plot_histogram(data_to_show, "gecmis_suc_sayisi", "Geçmiş Suç Sayısı Dağılımı")
         else:
             st.info("Geçmiş suç sayısı verisi mevcut değil.")
@@ -165,10 +182,10 @@ def home_page():
     with col2:
         st.info("📍 Bu veri setinde coğrafi (şehir veya bölge) bilgisi bulunmamaktadır, bu yüzden coğrafi dağılım grafiği gösterilemiyor.")
 
-        if "ceza_ay" in data_to_show.columns:
-            plot_histogram(data_to_show, "ceza_ay", "Ceza Süresi Dağılımı (Ay)")
+        if "ceza_yil_sayisal" in data_to_show.columns and data_to_show["ceza_yil_sayisal"].notnull().any():
+            plot_histogram(data_to_show, "ceza_yil_sayisal", "Ceza Süresi Dağılımı (Yıl)")
         else:
-            st.info("Ceza süresi verisi mevcut değil.")
+            st.info("Ceza süresi verisi mevcut değil veya sayısal değil.")
 
     st.markdown("---")
     st.caption(f"📂 Repo: https://github.com/Yasinaslann/PrisonPredictApp • {APP_VERSION}")
