@@ -9,3 +9,4 @@ matplotlib
 seaborn
 fpdf
 joblib
+requests
