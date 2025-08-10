@@ -1,65 +1,103 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 import joblib
-from pathlib import Path
 import shap
 import matplotlib.pyplot as plt
 import plotly.express as px
-import seaborn as sns
-from sklearn.metrics import classification_report, confusion_matrix, roc_curve, auc, precision_recall_curve
+from sklearn.metrics import classification_report, confusion_matrix, roc_curve, auc
+from io import BytesIO
+from pathlib import Path
 
-BASE_DIR = Path(__file__).parent
+# ---------------------------
+# Dosya yolları
+# ---------------------------
+MODEL_PATH = Path("prison_app/catboost_model.pkl")
+BOOL_PATH = Path("prison_app/bool_columns.pkl")
+CAT_FEAT_PATH = Path("prison_app/cat_features.pkl")
+FEATURES_PATH = Path("prison_app/feature_names.pkl")
+CAT_UNIQ_PATH = Path("prison_app/cat_unique_values.pkl")
+DATA_PATH = Path("prison_app/dataset.csv")  # Eğitim veri seti csv (upload etmelisin)
+PERF_REPORT_PATH = Path("prison_app/perf_report.csv")  # Model performans csv (isteğe bağlı)
 
-MODEL_FILE = BASE_DIR / "catboost_model.pkl"
-BOOL_FILE = BASE_DIR / "bool_columns.pkl"
-CAT_FILE = BASE_DIR / "cat_features.pkl"
-FEATURES_FILE = BASE_DIR / "feature_names.pkl"
-CAT_UNIQUE_FILE = BASE_DIR / "cat_unique_values.pkl"
-DATA_FILE = BASE_DIR / "Prisongüncelveriseti.csv"
-
+# ---------------------------
+# Feature açıklamaları (kısa)
+# ---------------------------
 FEATURE_DESCRIPTIONS = {
-    # Örnek açıklamalar
-    "Gender": "Mahkumun cinsiyeti",
-    "Race": "Mahkumun ırkı",
-    "Age_at_Release": "Tahliye yaşı",
-    # Diğer özellikler...
+    "Gender": "Mahkumun cinsiyeti (Male/Female).",
+    "Race": "Mahkumun ırkı (White, Black, Hispanic, vb).",
+    "Age_at_Release": "Tahliye anındaki yaş.",
+    "Gang_Affiliated": "Çete üyeliği (True/False).",
+    "Supervision_Risk_Score_First": "İlk risk skoru.",
+    "Education_Level": "Eğitim seviyesi.",
+    "Dependents": "Bakmakla yükümlü kişi sayısı.",
+    "Prison_Offense": "İşlenen suç türü.",
+    "Prison_Years": "Hapiste geçirilen yıl sayısı.",
+    "Num_Distinct_Arrest_Crime_Types": "Tutuklama suç türleri sayısı.",
+    # Daha fazla açıklama ekleyebilirsin...
 }
 
-@st.cache_resource
-def load_model_and_data():
-    model = joblib.load(MODEL_FILE)
-    bool_cols = joblib.load(BOOL_FILE)
-    cat_features = joblib.load(CAT_FILE)
-    feature_names = joblib.load(FEATURES_FILE)
-    cat_unique_values = joblib.load(CAT_UNIQUE_FILE)
-    df = pd.read_csv(DATA_FILE)
-    return model, bool_cols, cat_features, feature_names, cat_unique_values, df
+# ---------------------------
+# Veri ve model yükleme
+# ---------------------------
+@st.cache_resource(show_spinner=False)
+def load_resources():
+    model = joblib.load(MODEL_PATH)
+    bool_cols = joblib.load(BOOL_PATH)
+    cat_features = joblib.load(CAT_FEAT_PATH)
+    feature_names = joblib.load(FEATURES_PATH)
+    cat_unique_values = joblib.load(CAT_UNIQ_PATH)
+    df_data = pd.read_csv(DATA_PATH)
+    return model, bool_cols, cat_features, feature_names, cat_unique_values, df_data
 
-model, bool_cols, cat_features, feature_names, cat_unique_values, df = load_model_and_data()
+model, bool_cols, cat_features, feature_names, cat_unique_values, df_data = load_resources()
 
-def prediction_page():
-    st.title("📊 Recidivism (3 yıl) Tahmin Uygulaması")
+# ---------------------------
+# Performans verisi (örnek)
+# ---------------------------
+@st.cache_data(show_spinner=False)
+def load_perf_report():
+    try:
+        df_perf = pd.read_csv(PERF_REPORT_PATH)
+        return df_perf
+    except Exception:
+        return None
+
+df_perf_report = load_perf_report()
+
+# ---------------------------
+# Sayfa fonksiyonları
+# ---------------------------
+def predict_page():
+    st.title("🔮 Recidivism Tahmin Sayfası")
+
+    st.markdown("""
+    Mahkumun özelliklerini girin ve 3 yıl içindeki yeniden suç işleme riskini tahmin edin.  
+    Girdi alanlarının yanında kısa açıklamalar bulunuyor, üzerine gelerek detayları görebilirsiniz.
+    """)
 
     input_data = {}
     cols = st.columns(2)
-    for i, col in enumerate(feature_names):
-        container = cols[i % 2]
-        with container:
-            help_text = FEATURE_DESCRIPTIONS.get(col, "")
-            if col in bool_cols:
-                v = st.selectbox(col, ["True", "False"], help=help_text)
-            elif col in cat_features:
-                options = cat_unique_values.get(col, [])
+
+    for i, feature in enumerate(feature_names):
+        with cols[i % 2]:
+            help_text = FEATURE_DESCRIPTIONS.get(feature, "Açıklama bulunmamaktadır.")
+            if feature in bool_cols:
+                val = st.selectbox(f"{feature}", options=["True", "False"], help=help_text)
+                input_data[feature] = True if val == "True" else False
+            elif feature in cat_features:
+                options = cat_unique_values.get(feature, [])
                 if options:
-                    if len(options) > 20:
-                        v = st.text_input(col, value=options[0], help=help_text)
-                    else:
-                        v = st.selectbox(col, options, help=help_text)
+                    val = st.selectbox(f"{feature}", options=options, help=help_text)
                 else:
-                    v = st.text_input(col, help=help_text)
+                    val = st.text_input(f"{feature}", help=help_text)
+                input_data[feature] = val
             else:
-                v = st.number_input(col, value=0.0, format="%.6f", help=help_text)
-            input_data[col] = v
+                val = st.number_input(f"{feature}", value=0.0, format="%.6f", help=help_text)
+                input_data[feature] = val
+
+    if "prediction_history" not in st.session_state:
+        st.session_state.prediction_history = []
 
     if st.button("🔮 Tahmin Yap"):
         try:
@@ -68,178 +106,209 @@ def prediction_page():
                 if b in df_input.columns:
                     df_input[b] = df_input[b].astype(str)
 
-            pred = model.predict(df_input)[0]
+            prediction = model.predict(df_input)[0]
             proba = model.predict_proba(df_input)[0][1] if hasattr(model, "predict_proba") else None
 
-            color = "red" if pred == 1 else "green"
-            risk_text = "Yüksek risk (1)" if pred == 1 else "Düşük risk (0)"
-            st.markdown(
-                f"""
-                <div style="border-radius: 10px; padding: 20px; background-color: #f9f9f9; box-shadow: 0 0 10px {color}; margin-top: 20px;">
-                    <h2 style="color: {color}; text-align:center;">{risk_text}</h2>
-                    <p style="text-align:center;">Olasılık: <strong>{proba*100:.2f}%</strong></p>
-                </div>
-                """, unsafe_allow_html=True
-            )
+            color = "#d9534f" if prediction == 1 else "#5cb85c"
+            risk_text = "Yüksek Riskli" if prediction == 1 else "Düşük Riskli"
 
+            st.markdown(f"""
+            <div style="background-color:#f0f0f0; border-radius:12px; padding:20px; margin-top:20px;">
+                <h2 style="color:{color}; text-align:center;">Tahmin Sonucu: {risk_text} ({prediction})</h2>
+                <h4 style="text-align:center;">Risk Olasılığı: <strong>{proba*100:.2f}%</strong></h4>
+            </div>
+            """, unsafe_allow_html=True)
+
+            # SHAP Açıklaması
+            st.subheader("Tahmin Açıklaması: Modelin kararını etkileyen önemli özellikler")
             explainer = shap.TreeExplainer(model)
             shap_values = explainer.shap_values(df_input)
 
-            st.subheader("Tahmin Açıklaması (SHAP Waterfall Plot)")
-            fig, ax = plt.subplots(figsize=(12, 5))
-            shap.plots._waterfall.waterfall_legacy(explainer.expected_value, shap_values[0], df_input.iloc[0], max_display=10, show=False)
+            fig, ax = plt.subplots(figsize=(12, 6))
+            shap.plots._waterfall.waterfall_legacy(
+                explainer.expected_value, shap_values[0], df_input.iloc[0], max_display=10, show=False)
             st.pyplot(fig)
             plt.close(fig)
 
-            if pred == 1:
-                st.info("📌 Öneri: Eğitim programlarına katılmanız ve denetimli serbestlik programına dahil olmanız önerilir.")
+            st.subheader("📌 Kişisel Öneriler")
+            if prediction == 1:
+                st.info("""
+                - Eğitim programlarına katılmanız önerilir.  
+                - Denetimli serbestlik programına dahil olun.  
+                - Psikolojik destek ve rehberlik alın.  
+                """)
             else:
-                st.success("🎉 Öneri: Düşük risk grubundasınız. Destek programlarına devam edin.")
+                st.success("""
+                - Riskiniz düşük.  
+                - Mevcut destek ve programlara devam edin.  
+                - Topluma başarılı entegrasyon için çaba gösterin.  
+                """)
+
+            # Tahmin geçmişi
+            rec = input_data.copy()
+            rec["Prediction"] = prediction
+            rec["Probability"] = proba
+            st.session_state.prediction_history.append(rec)
 
         except Exception as e:
-            st.error(f"Tahmin sırasında hata: {e}")
+            st.error(f"Tahmin sırasında hata oluştu: {e}")
+
+    if st.session_state.prediction_history:
+        st.markdown("---")
+        st.subheader("📋 Tahmin Geçmişi")
+
+        df_hist = pd.DataFrame(st.session_state.prediction_history)
+        st.dataframe(df_hist)
+
+        csv_buffer = BytesIO()
+        df_hist.to_csv(csv_buffer, index=False)
+        csv_bytes = csv_buffer.getvalue()
+
+        st.download_button(
+            label="⬇️ Tahmin Geçmişini CSV Olarak İndir",
+            data=csv_bytes,
+            file_name="tahmin_gecmisi.csv",
+            mime="text/csv"
+        )
+
 
 def analysis_page():
     st.title("📊 Veri Analizi ve Görselleştirme")
 
-    age_column = "Age_at_Release"
-    gender_column = "Gender"
+    st.markdown("""
+    Eğitim verisindeki değişkenlerin dağılımlarını interaktif grafiklerle inceleyebilirsiniz.  
+    Sol taraftaki filtrelerle istediğiniz segmenti seçip grafikleri güncelleyebilirsiniz.
+    """)
 
-    df_clean = df.copy()
-    df_clean[age_column] = pd.to_numeric(df_clean[age_column], errors='coerce')
-    df_clean = df_clean.dropna(subset=[age_column, gender_column])
+    # Filtreler
+    gender_options = df_data["Gender"].dropna().unique().tolist()
+    race_options = df_data["Race"].dropna().unique().tolist()
+    age_min = int(df_data["Age_at_Release"].min())
+    age_max = int(df_data["Age_at_Release"].max())
 
-    age_min_val = int(df_clean[age_column].min())
-    age_max_val = int(df_clean[age_column].max())
+    st.sidebar.header("Filtreler")
+    selected_genders = st.sidebar.multiselect("Cinsiyet", options=gender_options, default=gender_options)
+    selected_races = st.sidebar.multiselect("Irk", options=race_options, default=race_options)
+    selected_age = st.sidebar.slider("Yaş Aralığı", min_value=age_min, max_value=age_max, value=(age_min, age_max))
 
-    age_min, age_max = st.sidebar.slider(
-        "Yaş Aralığı",
-        age_min_val,
-        age_max_val,
-        (age_min_val, age_max_val)
-    )
-
-    gender_options = df_clean[gender_column].unique().tolist()
-    gender_filter = st.sidebar.multiselect("Cinsiyet", options=gender_options, default=gender_options)
-
-    filtered_df = df_clean[
-        (df_clean[age_column] >= age_min) &
-        (df_clean[age_column] <= age_max) &
-        (df_clean[gender_column].isin(gender_filter))
+    # Filtre uygula
+    df_filtered = df_data[
+        (df_data["Gender"].isin(selected_genders)) &
+        (df_data["Race"].isin(selected_races)) &
+        (df_data["Age_at_Release"] >= selected_age[0]) &
+        (df_data["Age_at_Release"] <= selected_age[1])
     ]
 
-    st.write(f"**Filtrelenmiş Kayıt Sayısı:** {filtered_df.shape[0]}")
+    st.subheader("Risk Dağılımı")
+    risk_counts = df_filtered["Recidivism_Within_3years"].value_counts(normalize=True).reset_index()
+    risk_counts.columns = ["Recidivism", "Oran"]
+    risk_counts["Recidivism"] = risk_counts["Recidivism"].map({0:"Düşük Risk", 1:"Yüksek Risk"})
 
-    fig = px.histogram(filtered_df, x="Recidivism_Within_3years", color="Recidivism_Within_3years",
-                       category_orders={"Recidivism_Within_3years": [0, 1]},
-                       labels={"Recidivism_Within_3years": "3 Yıl İçinde Yeniden Suç"},
-                       title="Recidivism Sınıf Dağılımı",
-                       color_discrete_map={0: "green", 1: "red"})
+    fig = px.pie(risk_counts, names="Recidivism", values="Oran",
+                 title="3 Yıl İçinde Tekrar Suç İşleme Risk Dağılımı", hole=0.4)
     st.plotly_chart(fig, use_container_width=True)
 
-    selected_feature = st.selectbox("Özellik Seçin", options=feature_names)
-
-    if selected_feature in cat_features or selected_feature in bool_cols:
-        fig2 = px.histogram(filtered_df, x=selected_feature, color="Recidivism_Within_3years",
-                            title=f"{selected_feature} Dağılımı")
-    else:
-        fig2 = px.box(filtered_df, x="Recidivism_Within_3years", y=selected_feature,
-                      title=f"{selected_feature} Değişkeninin Recidivism'a Göre Dağılımı")
+    st.subheader("Yaş Dağılımı")
+    fig2 = px.histogram(df_filtered, x="Age_at_Release", nbins=30, title="Tahliye Yaş Dağılımı", marginal="box")
     st.plotly_chart(fig2, use_container_width=True)
 
-    st.subheader("Özet İstatistikler")
-    st.dataframe(filtered_df.describe().T.style.background_gradient(cmap="viridis"))
+    st.subheader("Cinsiyete Göre Risk Dağılımı")
+    fig3 = px.histogram(df_filtered, x="Gender", color="Recidivism_Within_3years",
+                        barmode="group", title="Cinsiyete Göre Risk Dağılımı",
+                        category_orders={"Gender": gender_options})
+    st.plotly_chart(fig3, use_container_width=True)
+
+    st.subheader("Eğitim Seviyesine Göre Risk Dağılımı")
+    fig4 = px.histogram(df_filtered, x="Education_Level", color="Recidivism_Within_3years",
+                        barmode="group", title="Eğitim Seviyesine Göre Risk Dağılımı")
+    st.plotly_chart(fig4, use_container_width=True)
+
 
 def performance_page():
-    st.title("📈 Model Performansı")
+    st.title("📈 Model Performans Sayfası")
 
-    y_true = df["Recidivism_Within_3years"]
-    X = df[feature_names].copy()
-    for b in bool_cols:
-        if b in X.columns:
-            X[b] = X[b].astype(str)
-    y_pred = model.predict(X)
+    st.markdown("""
+    Modelin genel performans metriği ve grafiklerini aşağıda görebilirsiniz.
+    """)
+
+    if df_perf_report is None:
+        st.warning("Performans raporu dosyası bulunamadı.")
+        return
 
     st.subheader("Sınıflandırma Raporu")
-    report_dict = classification_report(y_true, y_pred, output_dict=True)
-    report_df = pd.DataFrame(report_dict).transpose()
-    st.dataframe(report_df.style.background_gradient(cmap="Blues"))
+    st.dataframe(df_perf_report)
 
-    st.subheader("Karışıklık Matrisi (Confusion Matrix)")
-    cm = confusion_matrix(y_true, y_pred)
-    fig, ax = plt.subplots(figsize=(5,4))
-    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', ax=ax)
-    ax.set_xlabel("Tahmin Edilen")
-    ax.set_ylabel("Gerçek")
+    # Confusion matrix
+    cm = confusion_matrix(df_perf_report["True_Label"], df_perf_report["Predicted_Label"])
+    fig, ax = plt.subplots()
+    im = ax.imshow(cm, cmap='Blues')
+
+    ax.set_xticks(np.arange(2))
+    ax.set_yticks(np.arange(2))
+    ax.set_xticklabels(['Düşük Risk (0)', 'Yüksek Risk (1)'])
+    ax.set_yticklabels(['Düşük Risk (0)', 'Yüksek Risk (1)'])
+    plt.xlabel('Tahmin Edilen')
+    plt.ylabel('Gerçek')
+
+    for i in range(2):
+        for j in range(2):
+            ax.text(j, i, cm[i, j], ha='center', va='center', color='black')
+
     st.pyplot(fig)
-    plt.close(fig)
 
-    st.subheader("ROC Eğrisi ve Precision-Recall Eğrisi")
-    if hasattr(model, "predict_proba"):
-        y_prob = model.predict_proba(X)[:, 1]
-        fpr, tpr, _ = roc_curve(y_true, y_prob)
-        precision, recall, _ = precision_recall_curve(y_true, y_prob)
+    # ROC Eğrisi
+    if "Probability" in df_perf_report.columns:
+        fpr, tpr, _ = roc_curve(df_perf_report["True_Label"], df_perf_report["Probability"])
         roc_auc = auc(fpr, tpr)
+        fig2, ax2 = plt.subplots()
+        ax2.plot(fpr, tpr, color='darkorange', lw=2, label='ROC curve (AUC = %0.2f)' % roc_auc)
+        ax2.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
+        ax2.set_xlim([0.0, 1.0])
+        ax2.set_ylim([0.0, 1.05])
+        ax2.set_xlabel('False Positive Rate')
+        ax2.set_ylabel('True Positive Rate')
+        ax2.set_title('Receiver Operating Characteristic (ROC) Curve')
+        ax2.legend(loc="lower right")
+        st.pyplot(fig2)
 
-        fig_roc = px.area(
-            x=fpr, y=tpr,
-            title=f'ROC Eğrisi (AUC={roc_auc:.2f})',
-            labels=dict(x='False Positive Rate', y='True Positive Rate'),
-            width=700, height=400
-        )
-        fig_roc.add_shape(
-            type='line', line=dict(dash='dash'),
-            x0=0, x1=1, y0=0, y1=1
-        )
-        st.plotly_chart(fig_roc)
 
-        fig_pr = px.area(
-            x=recall, y=precision,
-            title='Precision-Recall Eğrisi',
-            labels=dict(x='Recall', y='Precision'),
-            width=700, height=400
-        )
-        st.plotly_chart(fig_pr)
-    else:
-        st.warning("Model predict_proba özelliğine sahip değil, ROC ve PR eğrisi çizilemiyor.")
+def about_page():
+    st.title("ℹ️ Proje Hakkında ve Kullanım Rehberi")
 
-def feature_importance_page():
-    st.title("📌 Özelliklerin Önemi ve Etkisi")
+    st.markdown("""
+    **Bu uygulama, mahkumların 3 yıl içindeki yeniden suç işleme riskini tahmin etmek için geliştirilmiştir.**  
 
-    explainer = shap.TreeExplainer(model)
-    X_for_shap = df[feature_names].copy()
-    for b in bool_cols:
-        if b in X_for_shap.columns:
-            X_for_shap[b] = X_for_shap[b].astype(str)
+    - Eğitim veri seti: [açıklamalar]  
+    - Kullanılan model: CatBoostClassifier  
+    - Veri özellikleri ve anlamları sayfasında bulunabilir.  
 
-    shap_values = explainer.shap_values(X_for_shap)
+    ### Kullanım  
+    - Tahmin sayfasında özelliklerinizi girin ve tahmin yapın.  
+    - Veri analizi sayfasında veri setini keşfedin.  
+    - Model performans sayfasında modelin doğruluk ve grafiklerini görün.  
 
-    st.subheader("Özelliklerin Genel Önemi (SHAP summary plot)")
-    fig, ax = plt.subplots(figsize=(10, 6))
-    shap.summary_plot(shap_values, X_for_shap, plot_type="bar", show=False)
-    st.pyplot(fig)
-    plt.close(fig)
+    ### Notlar  
+    - Tüm veriler anonimleştirilmiş ve etik kurallara uygun şekilde kullanılmıştır.  
+    - Tahminler kesin sonuç değil, sadece olasılıksal değerlendirmedir.  
 
-    feature_to_inspect = st.selectbox("Detaylı etkisini görmek istediğiniz özellik", options=feature_names)
-    st.subheader(f"{feature_to_inspect} Özelliğinin SHAP Değerleri")
+    Geri bildirim ve öneriler için iletişime geçebilirsiniz.
+    """)
 
-    fig2, ax2 = plt.subplots(figsize=(10, 6))
-    shap.dependence_plot(feature_to_inspect, shap_values, X_for_shap, show=False)
-    st.pyplot(fig2)
-    plt.close(fig2)
-
+# ---------------------------
+# Ana app - sayfa seçici
+# ---------------------------
 def main():
-    st.sidebar.title("Sayfa Seçimi")
-    page = st.sidebar.selectbox("Sayfa", ["Tahmin", "Veri Analizi", "Model Performansı", "Özelliklerin Önemi"])
+    st.sidebar.title("🚦 Sayfalar")
+    page = st.sidebar.radio("Bir sayfa seçin:", ("Tahmin", "Veri Analizi", "Model Performansı", "Hakkında"))
 
     if page == "Tahmin":
-        prediction_page()
+        predict_page()
     elif page == "Veri Analizi":
         analysis_page()
     elif page == "Model Performansı":
         performance_page()
-    elif page == "Özelliklerin Önemi":
-        feature_importance_page()
+    elif page == "Hakkında":
+        about_page()
 
 if __name__ == "__main__":
     main()
