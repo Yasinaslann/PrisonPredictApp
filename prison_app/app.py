@@ -15,7 +15,7 @@ CANDIDATE_PATHS = [
     Path("/mnt/data/Prisongüncelveriseti.csv")
 ]
 
-APP_VERSION = "v1.3 (Ana Sayfa)"
+APP_VERSION = "v1.4 (Ana Sayfa)"
 
 @st.cache_data(show_spinner=False)
 def load_data():
@@ -35,14 +35,14 @@ def safe_mean(series):
     return pd.to_numeric(series, errors='coerce').dropna().mean()
 
 def render_card(col, number, label, emoji, color="#0d47a1"):
-    card_style = """
+    card_style = f"""
         background-color: #e3f2fd;
         border-radius: 14px;
         padding: 1.5rem 1rem;
         text-align: center;
         box-shadow: 0 5px 15px rgb(3 155 229 / 0.25);
         font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        margin-bottom: 1rem;
+        margin: 0;  /* Boşluk kaldırıldı */
         """
     col.markdown(f"""
         <div style="{card_style}">
@@ -52,7 +52,7 @@ def render_card(col, number, label, emoji, color="#0d47a1"):
     """, unsafe_allow_html=True)
 
 def home_page(df):
-    # Üst kutu (koyu mavi)
+    # Üst kutu koyu mavi kutu
     st.markdown(
         """
         <div style="
@@ -82,7 +82,7 @@ def home_page(df):
 
     st.markdown("---")
 
-    # İstatistik kartları sadece dolu değerler gösterilecek
+    # İstatistik kartlar (boşluk yok)
     total_rows = df.shape[0] if df is not None else 0
     total_cols = df.shape[1] if df is not None else 0
     unique_offenses = df["Prison_Offense"].nunique() if df is not None and "Prison_Offense" in df.columns else 0
@@ -92,9 +92,13 @@ def home_page(df):
     unique_education = df["Education_Level"].nunique() if df is not None and "Education_Level" in df.columns else 0
     unique_genders = df["Gender"].nunique() if df is not None and "Gender" in df.columns else 0
 
-    cols = st.columns(7)
+    # Yeni ilgi çekici kartlar ekliyorum (örnek):
+    # - Eğitim seviyelerinin ortalama ceza süresine etkisi (basit ortalama)
+    # - Cinsiyete göre ortalama yeniden suç oranı
+    # Bunları ekleyelim sadece değer varsa.
 
-    # Kartları koşullu göster
+    cols = st.columns(8)  # 8 tane kolon olacak, boşluk yok.
+
     render_card(cols[0], f"{total_rows:,}", "Toplam Kayıt", "🗂️")
     render_card(cols[1], total_cols, "Sütun Sayısı", "📋")
     render_card(cols[2], unique_offenses, "Farklı Suç Tipi", "📌")
@@ -111,17 +115,25 @@ def home_page(df):
     if unique_education > 0:
         render_card(cols[6], unique_education, "Eğitim Seviyesi Sayısı", "🎓", "#6a1b9a")
 
+    if unique_genders > 0:
+        render_card(cols[7], unique_genders, "Cinsiyet Sayısı", "🚻", "#283593")
+
     st.markdown("---")
 
-    # Veri seti önizleme: 2 farklı modern stil ile
-    st.subheader("📂 Veri Seti Önizlemesi (İlk 10 Satır)")
-    st.dataframe(df.head(10), use_container_width=True)
+    # Veri seti önizlemesi modern, eşit kolonlu ve farklı temalar
+    st.subheader("📂 Veri Seti Önizlemesi")
 
-    with st.expander("📂 Veri Seti İkinci Önizleme (Detaylı)"):
-        # Daha geniş ve daha şık
+    preview_cols = st.columns(2)
+
+    with preview_cols[0]:
+        st.markdown("**📋 İlk 10 Satır (Standart Tablo)**")
+        st.dataframe(df.head(10), use_container_width=True)
+
+    with preview_cols[1]:
+        st.markdown("**🎨 İlk 10 Satır (Renkli Stil)**")
         st.write(
-            df.head(20).style
-            .background_gradient(cmap='Blues')
+            df.head(10).style
+            .background_gradient(cmap='PuBu')
             .set_properties(**{'font-family': 'Segoe UI', 'font-size': '12pt'})
         )
 
@@ -130,6 +142,7 @@ def home_page(df):
     recid_col = next((c for c in df.columns if "recid" in c.lower()), None)
 
     # Grafikler
+
     st.subheader("🎯 Yeniden Suç İşleme Oranı (Pasta Grafiği)")
     col1, col2 = st.columns([3,1])
     with col1:
