@@ -1,7 +1,9 @@
 import streamlit as st
 import pandas as pd
-from pathlib import Path
 import plotly.express as px
+import plotly.figure_factory as ff
+import numpy as np
+from pathlib import Path
 
 st.set_page_config(
     page_title="Yeniden Suç İşleme Tahmin Uygulaması",
@@ -28,44 +30,8 @@ def load_data():
             continue
     return None
 
-def convert_sentence_length(val):
-    if pd.isna(val):
-        return None
-    val = str(val).strip().lower()
-    if val == "less than 1 year":
-        return 0.5
-    elif val == "1-2 years":
-        return 1.5
-    elif val == "greater than 2 to 3 years":
-        return 2.5
-    elif val == "more than 3 years":
-        return 4
-    else:
-        try:
-            return float(val)
-        except:
-            return None
-
-def create_demo_data():
-    demo = pd.DataFrame({
-        "Prison_Offense": ["hırsızlık", "dolandırıcılık", "yaralama", "hırsızlık", "uyuşturucu", "dolandırıcılık"],
-        "Prison_Years": ["Less than 1 year", "1-2 years", "More than 3 years", "1-2 years", "Less than 1 year", "More than 3 years"],
-        "Num_Distinct_Arrest_Crime_Types": [0, 2, 1, 0, 3, 1],
-        "Recidivism_Within_3years": [0, 1, 0, 0, 1, 0]
-    })
-    return demo
-
-def plot_graph(df, column, grafik_tipi, title):
-    if grafik_tipi == "Bar Grafiği":
-        counts = df[column].value_counts().reset_index()
-        counts.columns = [column, "Sayı"]
-        fig = px.bar(counts, x=column, y="Sayı", title=title)
-    elif grafik_tipi == "Histogram":
-        fig = px.histogram(df, x=column, nbins=20, title=title)
-    else:  # Box Plot
-        fig = px.box(df, y=column, title=title)
-    fig.update_layout(template="plotly_white", title_x=0.5)
-    return fig
+def info_icon(text):
+    return f"ℹ️ {text}"
 
 def home_page(df):
     st.title("🏛️ Yeniden Suç İşleme Tahmin Uygulaması")
@@ -73,99 +39,125 @@ def home_page(df):
     st.markdown("""
     ### Proje Amacı
 
-    Tahliye sonrası mahpusların yeniden suç işleme riskini analiz ederek,  
-    toplum güvenliğini artırmak ve bireylerin rehabilitasyon süreçlerini desteklemek amacıyla geliştirilmiş bir platformdur.  
-    Veri bilimi ve makine öğrenmesi yöntemleri kullanılarak, riskli durumların önceden tespiti ve etkili müdahaleler sağlanması hedeflenmektedir.
+    Tahliye sonrası mahpusların yeniden suç işleme riskini analiz etmek ve bu risklerin azaltılmasına katkı sağlamak amaçlanmıştır.  
+    Veri bilimi ve makine öğrenmesi teknikleriyle riskli grupların tespiti hedeflenmektedir.
 
-    ### Veri Seti
+    ### Veri Seti Hakkında
 
-    Veri seti, mahpusların demografik bilgileri, ceza süreleri, suç tipleri ve geçmiş suç kayıtlarını içermektedir.  
-    Bu kapsamlı veri, suçun tekrarlanma olasılığını etkileyen faktörlerin derinlemesine incelenmesine olanak tanır.
+    Veri seti; mahpusların demografik bilgileri, ceza süreleri, suç tipleri, geçmiş suç kayıtları ve yeniden suç işleme bilgilerini içermektedir.  
+    Bu bilgiler, suç tekrarlama olasılığını etkileyen faktörlerin incelenmesini sağlar.
     """)
 
     if df is None:
         st.warning("Veri seti bulunamadı. Örnek demo veri gösterilmektedir.")
-        df = create_demo_data()
+        df = pd.DataFrame({
+            "Gender": ["Male", "Female", "Male", "Female"],
+            "Education_Level": ["High School", "Elementary", "High School", "Elementary"],
+            "Recidivism_Within_3years": [1, 0, 0, 1],
+            "Prison_Offense": ["Theft", "Fraud", "Assault", "Theft"],
+            "Prison_Years": ["Less than 1 year", "1-2 years", "More than 3 years", "1-2 years"],
+            "Num_Distinct_Arrest_Crime_Types": [2, 1, 3, 0]
+        })
 
-    df["Prison_Years_Numeric"] = df["Prison_Years"].apply(convert_sentence_length)
-
-    with st.expander("📂 Veri Seti Önizlemesi (İlk 10 Satır)"):
-        st.dataframe(df.head(10))
-
-    st.subheader("📊 Temel İstatistikler")
-    total_records = len(df)
-    unique_crimes = df["Prison_Offense"].nunique() if "Prison_Offense" in df.columns else 0
-    avg_sentence = df["Prison_Years_Numeric"].mean()
+    # Hedef değişkeni bul
     recid_col = next((c for c in df.columns if "recid" in c.lower()), None)
-    recid_rate = df[recid_col].mean() if recid_col else None
-
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("🗂️ Toplam Kayıt", total_records)
-    col2.metric("📌 Farklı Suç Tipi", unique_crimes)
-    col3.metric("⏳ Ortalama Ceza Süresi (yıl)", f"{avg_sentence:.2f}" if avg_sentence else "Veri yok")
-    col4.metric("⚠️ Yeniden Suç İşleme Oranı", f"{recid_rate:.2%}" if recid_rate else "Veri yok")
-
-    st.markdown("""
-    - **Toplam Kayıt:** Veri setindeki toplam birey sayısı.  
-    - **Farklı Suç Tipi:** Suç kategorilerinin benzersiz sayısı.  
-    - **Ortalama Ceza Süresi:** Yıllık bazda ortalama ceza süresi.  
-    - **Yeniden Suç İşleme Oranı:** Tahliye sonrası 3 yıl içinde tekrar suç işleme oranı.
-    """)
 
     st.markdown("---")
-    st.subheader("📈 Veri Seti Görselleştirmeleri")
-
-    col1, col2 = st.columns(2)
-
+    st.subheader("🎯 Yeniden Suç İşleme Oranı Dağılımı")
+    col1, col2 = st.columns([3,1])
     with col1:
-        st.markdown("### Suç Tipi Dağılımı")
-        grafik_tipi_suc = st.selectbox(
-            "Grafik Tipi:",
-            ["Bar Grafiği", "Histogram", "Kutu Grafiği (Box Plot)"],
-            key="grafik_suc",
-            label_visibility="collapsed"
-        )
-        if "Prison_Offense" in df.columns:
-            if grafik_tipi_suc == "Kutu Grafiği (Box Plot)":
-                st.info("Suç tipi kategorik olduğundan kutu grafiği uygun değildir.")
-            else:
-                fig = plot_graph(df, "Prison_Offense", grafik_tipi_suc, "Suç Tipi Dağılımı")
-                st.plotly_chart(fig, use_container_width=True)
+        if recid_col and recid_col in df.columns:
+            counts = df[recid_col].value_counts().sort_index()
+            labels = ["Tekrar Suç İşlemedi", "Tekrar Suç İşledi"]
+            values = [counts.get(0, 0), counts.get(1, 0)]
+            fig = px.pie(
+                names=labels, values=values, 
+                title="3 Yıl İçinde Yeniden Suç İşleme Oranı",
+                color_discrete_sequence=px.colors.sequential.RdBu
+            )
+            fig.update_traces(textposition='inside', textinfo='percent+label')
+            fig.update_layout(title_x=0.5, template="plotly_white")
+            st.plotly_chart(fig, use_container_width=True)
         else:
-            st.info("Suç tipi verisi mevcut değil.")
-
-        st.markdown("### Geçmiş Suç Sayısı Dağılımı")
-        grafik_tipi_gecmis = st.selectbox(
-            "Grafik Tipi:",
-            ["Bar Grafiği", "Histogram", "Kutu Grafiği (Box Plot)"],
-            key="grafik_gecmis",
-            label_visibility="collapsed"
-        )
-        if "Num_Distinct_Arrest_Crime_Types" in df.columns:
-            fig2 = plot_graph(df, "Num_Distinct_Arrest_Crime_Types", grafik_tipi_gecmis, "Geçmiş Suç Sayısı Dağılımı")
-            st.plotly_chart(fig2, use_container_width=True)
-        else:
-            st.info("Geçmiş suç sayısı verisi mevcut değil.")
+            st.info("Yeniden suç işleme verisi bulunmamaktadır.")
 
     with col2:
-        st.markdown("### Ceza Süresi Dağılımı (Yıl)")
-        grafik_tipi_ceza = st.selectbox(
-            "Grafik Tipi:",
-            ["Bar Grafiği", "Histogram", "Kutu Grafiği (Box Plot)"],
-            key="grafik_ceza",
-            label_visibility="collapsed"
-        )
-        if "Prison_Years_Numeric" in df.columns and df["Prison_Years_Numeric"].notnull().any():
-            fig3 = plot_graph(df, "Prison_Years_Numeric", grafik_tipi_ceza, "Ceza Süresi Dağılımı (Yıl)")
-            st.plotly_chart(fig3, use_container_width=True)
-        else:
-            st.info("Ceza süresi verisi mevcut değil veya sayısal değil.")
+        st.markdown(info_icon("Bu grafik, tahliye sonrası mahpusların yeniden suç işleme durumunu yüzdesel olarak gösterir."))
+
+    st.markdown("---")
+    st.subheader("👥 Demografik Dağılımlar ve Recidivism Oranları")
+
+    demo_cols = ["Gender", "Education_Level"]
+    for col in demo_cols:
+        if col in df.columns:
+            st.markdown(f"#### {col.replace('_',' ')} Dağılımı")
+            c1, c2 = st.columns([3,1])
+            with c1:
+                counts = df[col].value_counts()
+                fig_bar = px.bar(
+                    x=counts.index, y=counts.values, 
+                    labels={"x": col, "y": "Kişi Sayısı"},
+                    title=f"{col.replace('_',' ')} Dağılımı",
+                    color=counts.index,
+                    color_discrete_sequence=px.colors.qualitative.Safe
+                )
+                fig_bar.update_layout(showlegend=False, template="plotly_white", title_x=0.5)
+                st.plotly_chart(fig_bar, use_container_width=True)
+
+                # Recidivism oranı barı
+                if recid_col:
+                    recid_means = df.groupby(col)[recid_col].mean()
+                    fig_recid = px.bar(
+                        x=recid_means.index, y=recid_means.values,
+                        labels={"x": col, "y": "Ortalama Recidivism Oranı"},
+                        title=f"{col.replace('_',' ')} Bazında Yeniden Suç İşleme Oranı",
+                        color=recid_means.index,
+                        color_discrete_sequence=px.colors.qualitative.Safe
+                    )
+                    fig_recid.update_layout(showlegend=False, template="plotly_white", title_x=0.5, yaxis=dict(range=[0,1]))
+                    st.plotly_chart(fig_recid, use_container_width=True)
+            with c2:
+                st.markdown(info_icon(f"{col} dağılımı ve bu gruplara göre yeniden suç işleme oranları gösterilmektedir."))
+
+    st.markdown("---")
+    st.subheader("📊 Özellikler Arası Korelasyon (Recidivism ile)")
+
+    numeric_cols = df.select_dtypes(include=["number"]).columns.tolist()
+    if recid_col in numeric_cols:
+        numeric_cols.remove(recid_col)
+
+    # Recidivism ile korelasyonlar
+    corr = None
+    try:
+        corr = df[numeric_cols + [recid_col]].corr()[recid_col].drop(recid_col)
+    except:
+        corr = None
+
+    if corr is not None and not corr.empty:
+        corr_df = pd.DataFrame(corr).reset_index()
+        corr_df.columns = ["Özellik", "Recidivism Korelasyonu"]
+        corr_df = corr_df.sort_values(by="Recidivism Korelasyonu", key=abs, ascending=False)
+
+        c1, c2 = st.columns([3,1])
+        with c1:
+            fig_corr = px.bar(
+                corr_df, x="Özellik", y="Recidivism Korelasyonu",
+                color="Recidivism Korelasyonu",
+                color_continuous_scale=px.colors.diverging.RdBu,
+                title="Özelliklerin Yeniden Suç İşleme ile Korelasyonu"
+            )
+            fig_corr.update_layout(template="plotly_white", title_x=0.5)
+            st.plotly_chart(fig_corr, use_container_width=True)
+        with c2:
+            st.markdown(info_icon("Bu grafik, sayısal özelliklerin yeniden suç işleme ile korelasyonunu gösterir."))
+    else:
+        st.info("Sayısal veriler ve recidivism korelasyon bilgisi mevcut değil veya hesaplanamadı.")
 
     st.caption(f"📂 Repo: https://github.com/Yasinaslann/PrisonPredictApp • {APP_VERSION}")
 
 def placeholder_page(name):
     st.title(name)
-    st.info("Bu sayfa henüz hazırlanmadı. Ana sayfa hazırlandıktan sonra bu sayfa geliştirilecektir.")
+    st.info("Bu sayfa henüz hazırlanmadı. Ana sayfa hazırlandıktan sonra geliştirilecektir.")
 
 def main():
     df = load_data()
