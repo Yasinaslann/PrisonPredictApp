@@ -1,5 +1,5 @@
 # Gerekli kütüphaneleri import ediyoruz.
-# Eğer bu kütüphaneler yüklü değilse, terminalden 'pip install streamlit pandas numpy catboost scikit-learn matplotlib plotly' komutlarını çalıştırın.
+# Eğer bu kütüphaneler yüklü değilse, terminalden 'pip install -r requirements.txt' komutunu çalıştırın.
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -17,9 +17,8 @@ st.set_page_config(
 )
 
 # --- Veri Seti ve Model Yükleme ---
-# Projenizdeki tüm dosyaları (CSV ve PKL) burada yüklüyoruz.
-# GitHub'daki dosya yolları kullanıldı.
-
+# Bu fonksiyonlar, dosyaları GitHub deponuzdan yüklemek için kullanılır.
+# @st.cache_data ve @st.cache_resource, uygulamayı her çalıştırdığınızda dosyaların yeniden yüklenmesini engeller.
 @st.cache_data
 def load_data():
     """Temizlenmiş veri setini yükler."""
@@ -27,7 +26,7 @@ def load_data():
         df = pd.read_csv("Prisongüncelveriseti.csv")
         return df
     except FileNotFoundError:
-        st.error("Prisongüncelveriseti.csv dosyası bulunamadı. Lütfen dosyanın uygulamanızla aynı klasörde olduğundan emin olun.")
+        st.error("Prisongüncelveriseti.csv dosyası bulunamadı. Lütfen dosyanın GitHub deponuzda ve uygulamanızla aynı dizinde olduğundan emin olun.")
         return None
 
 @st.cache_resource
@@ -45,7 +44,7 @@ def load_model_and_preprocessors():
         
         return model, bool_columns, cat_features, cat_unique_values, feature_names
     except FileNotFoundError as e:
-        st.error(f"Gerekli model veya ön işleme dosyası bulunamadı: {e}. Lütfen tüm dosyaların uygulamanızla aynı klasörde olduğundan emin olun.")
+        st.error(f"Gerekli model veya ön işleme dosyası bulunamadı: {e}. Lütfen tüm dosyaların GitHub deponuzda ve uygulamanızla aynı dizinde olduğundan emin olun.")
         return None, None, None, None, None
 
 # Verileri ve modeli yüklüyoruz.
@@ -53,17 +52,19 @@ df_cleaned = load_data()
 model, bool_columns, cat_features, cat_unique_values, feature_names = load_model_and_preprocessors()
 
 
-def preprocess_input(input_df):
+def preprocess_input(input_df, feature_names, cat_features):
     """Kullanıcı girdilerini modelin beklediği formata dönüştürür."""
     # Orijinal feature_names'e uygun bir DataFrame oluşturuyoruz.
     input_processed = pd.DataFrame(columns=feature_names)
     
     # Tüm değerleri varsayılan olarak 0 veya False ile dolduruyoruz
     for col in feature_names:
-        if col in bool_columns:
-            input_processed[col] = False
+        if col.startswith("Gender_") or col.startswith("Race_") or col.startswith("Age_at_Release_") or col.startswith("Education_Level_") or col.startswith("Prison_Years_"):
+            input_processed.loc[0, col] = 0
+        elif col in bool_columns:
+            input_processed.loc[0, col] = False
         else:
-            input_processed[col] = 0
+            input_processed.loc[0, col] = 0
             
     # Kullanıcı girdilerini yerleştiriyoruz
     for col, val in input_df.iloc[0].items():
@@ -71,11 +72,11 @@ def preprocess_input(input_df):
             input_processed.loc[0, col] = val
         elif col in cat_features:
             # One-hot encoding için ilgili sütun adını bulup 1 yapıyoruz.
-            # Örneğin, 'Gender_M' sütununu 1 yapıyoruz.
             encoded_col_name = f"{col}_{val}"
             if encoded_col_name in input_processed.columns:
                 input_processed.loc[0, encoded_col_name] = 1
         else:
+            # Diğer sayısal ve boolean değerleri yerleştiriyoruz
             input_processed.loc[0, col] = val
             
     # Sütunları tekrar sıralıyoruz
@@ -116,6 +117,7 @@ def prediction_model_page():
     st.markdown("Aşağıdaki alanları doldurarak bir mahpusun yeniden suç işleme riskini tahmin edebilirsiniz.")
     
     if df_cleaned is None or model is None:
+        st.warning("Uygulama dosyaları yüklenirken bir sorun oluştu. Lütfen gerekli tüm dosyaların (CSV ve PKL) mevcut olduğundan emin olun.")
         return
 
     # Input alanları
@@ -151,12 +153,12 @@ def prediction_model_page():
             'Prior_Arrest_Episodes_DVCharges': [prior_arrest_episodes_dvcharges],
             'Condition_MH_SA': [condition_mh_sa],
             'Percent_Days_Employed': [percent_days_employed],
-            'Jobs_Per_Year': [jobs_per_per_year]
+            'Jobs_Per_Year': [jobs_per_year] # Hata düzeltildi: jobs_per_per_year -> jobs_per_year
         }
         input_df = pd.DataFrame(input_data)
         
         # Ön işleme fonksiyonunu kullanarak veriyi modele uygun hale getiriyoruz.
-        preprocessed_data = preprocess_input(input_df)
+        preprocessed_data = preprocess_input(input_df, feature_names, cat_features)
         
         # Modelin tahminini alıyoruz.
         prediction = model.predict(preprocessed_data)
@@ -205,7 +207,7 @@ def recommendation_page():
             """)
 
         st.subheader("Benzer Profillerin Analizi")
-        # Benzer profilleri gösteren temsili bir grafik
+        # Benzer profilleri gösteren bir grafik
         recidivism_by_age = df_cleaned.groupby('Age_at_Release')['Recidivism_Within_3years'].mean().reset_index()
         fig = px.bar(recidivism_by_age, x='Age_at_Release', y='Recidivism_Within_3years',
                      title='Yaş Gruplarına Göre Yeniden Suç İşleme Oranı',
@@ -222,13 +224,13 @@ def model_analysis_page():
     st.markdown("Makine öğrenmesi modelinin performans metriklerini ve veri setindeki önemli değişkenleri burada inceleyebilirsiniz.")
     
     if model is None:
+        st.warning("Uygulama dosyaları yüklenirken bir sorun oluştu. Lütfen gerekli tüm dosyaların (PKL) mevcut olduğundan emin olun.")
         return
 
     st.subheader("Model Performans Metrikleri")
-    # BU KISMI SİZİN DEĞERLENDİRME VERİ SETİNİZE GÖRE GÜNCELLEMENİZ GEREKİR.
-    st.markdown("### Karışıklık Matrisi (Confusion Matrix)")
-    # Burada modelinizin test setindeki sonuçlarına göre gerçek Confusion Matrix'i gösterebilirsiniz.
-    st.info("Bu kısım, modelinizin test verileri üzerindeki gerçek performansına göre güncellenmelidir.")
+    
+    # Bu kısım modelinizin test setindeki sonuçlarına göre güncellenmelidir.
+    st.info("Model performans metrikleri (Confusion Matrix, Accuracy vb.) için lütfen test veri setinizdeki sonuçları buraya ekleyin.")
     
     st.subheader("Önemli Değişkenler (Feature Importance)")
     # CatBoost'un kendi feature importance metodu kullanılarak gerçek değerler gösterilir.
@@ -246,7 +248,7 @@ def model_analysis_page():
     else:
         st.warning("Modelden özellik önemi (feature importance) bilgisi alınamadı.")
 
-    st.subheader("Harita Görselleştirmesi (Temsili)")
+    st.subheader("Harita Görselleştirmesi")
     st.markdown("""
     **Not:** Gerçek harita görselleştirmesi için veri setinizdeki `Residence_PUMA` gibi coğrafi konum bilgileri kullanılmalıdır.
     Aşağıdaki grafik, temsili bölgelere göre yeniden suç işleme oranlarını göstermektedir.
@@ -278,4 +280,3 @@ elif selection == "Tavsiye ve Profil Analizi":
     recommendation_page()
 elif selection == "Model Analizleri ve Harita":
     model_analysis_page()
-
