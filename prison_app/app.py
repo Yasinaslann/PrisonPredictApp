@@ -37,13 +37,13 @@ df = load_data()
 
 def create_demo_data() -> pd.DataFrame:
     demo = pd.DataFrame({
-        "suç_tipi": ["hırsızlık", "dolandırıcılık", "yaralama", "hırsızlık", "uyuşturucu", "dolandırıcılık", "dolandırıcılık"],
-        "ceza_ay": [6, 12, 24, 3, 18, 9, 6],
-        "egitim_durumu": ["lise", "ilkokul", "lise", "lise", "üniversite", "lise", "ilkokul"],
-        "gecmis_suc_sayisi": [0, 2, 1, 0, 3, 1, 2],
-        "il": ["Istanbul", "Ankara", "Izmir", "Istanbul", "Bursa", "Ankara", "Izmir"],
+        "Prison_Offense": ["hırsızlık", "dolandırıcılık", "yaralama", "hırsızlık", "uyuşturucu", "dolandırıcılık", "dolandırıcılık"],
+        "Prison_Years": [0.5, 1, 2, 0.25, 1.5, 0.75, 0.5],
+        "Education_Level": ["lise", "ilkokul", "lise", "lise", "üniversite", "lise", "ilkokul"],
+        "Num_Distinct_Arrest_Crime_Types": [0, 2, 1, 0, 3, 1, 2],
         "Recidivism_Within_3years": [0, 1, 0, 0, 1, 0, 1]
     })
+    # demo'da eksik il olmadığı için coğrafi grafik koymadım
     return demo
 
 def show_basic_stats(df: pd.DataFrame):
@@ -91,12 +91,11 @@ def home_page():
         Kullanılan veri seti, Türkiye’deki mahpusların çeşitli demografik, suç geçmişi ve ceza bilgilerini içermektedir.  
         Veri setinde yer alan bazı temel değişkenler şunlardır:  
 
-        - **Suç Tipi (suç_tipi):** Mahpusların işlediği suçların kategorileri  
-        - **Ceza Süresi (ceza_ay):** Hapis cezasının ay cinsinden uzunluğu  
-        - **Eğitim Durumu (egitim_durumu):** Mahpusların eğitim seviyeleri  
-        - **Geçmiş Suç Sayısı (gecmis_suc_sayisi):** Daha önce işlenen suçların sayısı  
-        - **İl (il):** Mahpusun cezaevinin bulunduğu şehir veya bölge  
-        - **Yeniden Suç İşleme (Recidivism_Within_3years):** Tahliye sonrası 3 yıl içinde yeniden suç işleyip işlemediği (1=Evet, 0=Hayır)  
+        - **Prison_Offense:** Mahpusların işlediği suçların kategorileri  
+        - **Prison_Years:** Hapis cezasının yıl cinsinden uzunluğu  
+        - **Education_Level:** Mahpusların eğitim seviyeleri  
+        - **Num_Distinct_Arrest_Crime_Types:** Daha önce işlenen farklı suç türlerinin sayısı  
+        - **Recidivism_Within_3years:** Tahliye sonrası 3 yıl içinde yeniden suç işleyip işlemediği (1=Evet, 0=Hayır)  
 
         Veri seti, bu tür değişkenler üzerinden modelleme ve analizlere imkan verir.  
         Elinizde `Prisongüncelveriseti.csv` dosyası yoksa, demo veri seti kullanılacaktır.
@@ -114,8 +113,17 @@ def home_page():
             """
         )
         data_to_show = create_demo_data()
+        # demo'da ay cinsinden ceza süresi ekleyelim
+        data_to_show["ceza_ay"] = data_to_show["Prison_Years"] * 12
+        data_to_show["gecmis_suc_sayisi"] = data_to_show["Num_Distinct_Arrest_Crime_Types"]
+        data_to_show["suç_tipi"] = data_to_show["Prison_Offense"]
+        data_to_show["egitim_durumu"] = data_to_show["Education_Level"]
     else:
-        data_to_show = df
+        data_to_show = df.copy()
+        data_to_show["ceza_ay"] = data_to_show["Prison_Years"] * 12
+        data_to_show["gecmis_suc_sayisi"] = data_to_show["Num_Distinct_Arrest_Crime_Types"]
+        data_to_show["suç_tipi"] = data_to_show["Prison_Offense"]
+        data_to_show["egitim_durumu"] = data_to_show["Education_Level"]
 
     with st.expander("📂 Veri Seti Önizlemesi (İlk 10 Satır)"):
         st.dataframe(data_to_show.head(10))
@@ -124,7 +132,6 @@ def home_page():
 
     st.markdown("---")
 
-    # Grafiklar
     st.subheader("📈 Veri Seti Görselleştirmeleri")
 
     col1, col2 = st.columns(2)
@@ -141,10 +148,7 @@ def home_page():
             st.info("Geçmiş suç sayısı verisi mevcut değil.")
 
     with col2:
-        if "il" in data_to_show.columns:
-            plot_category_distribution(data_to_show, "il", "Coğrafi Dağılım (İl Bazında)")
-        else:
-            st.info("İl bilgisi mevcut değil.")
+        st.info("Coğrafi dağılım verisi bu veri setinde yok.")
 
         if "ceza_ay" in data_to_show.columns:
             plot_histogram(data_to_show, "ceza_ay", "Ceza Süresi Dağılımı (Ay)")
@@ -154,16 +158,10 @@ def home_page():
     st.markdown("---")
     st.caption(f"📂 Repo: https://github.com/Yasinaslann/PrisonPredictApp • {APP_VERSION}")
 
-# -------------------------
-# Placeholder sayfalar
-# -------------------------
 def placeholder_page(name: str):
     st.title(name)
     st.info("Bu sayfa henüz hazırlanmadı. 'Ana Sayfa' tasarımını onayladıktan sonra aynı kalite/formatta bu sayfayı da oluşturacağım.")
 
-# -------------------------
-# Sidebar navigasyon
-# -------------------------
 st.sidebar.title("Navigasyon")
 page = st.sidebar.radio(
     "Sayfa seçin",
