@@ -4,13 +4,12 @@ import joblib
 from pathlib import Path
 import shap
 import matplotlib.pyplot as plt
-import seaborn as sns
-from sklearn.metrics import classification_report, confusion_matrix
 import plotly.express as px
-import plotly.graph_objects as go
+import seaborn as sns
+from sklearn.metrics import classification_report, confusion_matrix, roc_curve, auc, precision_recall_curve
 
-# Dosya yolları
 BASE_DIR = Path(__file__).parent
+
 MODEL_FILE = BASE_DIR / "catboost_model.pkl"
 BOOL_FILE = BASE_DIR / "bool_columns.pkl"
 CAT_FILE = BASE_DIR / "cat_features.pkl"
@@ -19,11 +18,11 @@ CAT_UNIQUE_FILE = BASE_DIR / "cat_unique_values.pkl"
 DATA_FILE = BASE_DIR / "Prisongüncelveriseti.csv"
 
 FEATURE_DESCRIPTIONS = {
+    # Örnek açıklamalar
     "Gender": "Mahkumun cinsiyeti",
     "Race": "Mahkumun ırkı",
     "Age_at_Release": "Tahliye yaşı",
-    "Gang_Affiliated": "Çete bağlantısı (True/False)",
-    # Diğer açıklamalar...
+    # Diğer özellikler...
 }
 
 @st.cache_resource
@@ -72,30 +71,26 @@ def prediction_page():
             pred = model.predict(df_input)[0]
             proba = model.predict_proba(df_input)[0][1] if hasattr(model, "predict_proba") else None
 
-            # Güzel gösterim için custom HTML ve CSS
             color = "red" if pred == 1 else "green"
             risk_text = "Yüksek risk (1)" if pred == 1 else "Düşük risk (0)"
             st.markdown(
                 f"""
-                <div style="border-radius: 10px; padding: 20px; background-color: #f0f0f0; box-shadow: 0 0 10px {color}; margin-top: 20px;">
+                <div style="border-radius: 10px; padding: 20px; background-color: #f9f9f9; box-shadow: 0 0 10px {color}; margin-top: 20px;">
                     <h2 style="color: {color}; text-align:center;">{risk_text}</h2>
                     <p style="text-align:center;">Olasılık: <strong>{proba*100:.2f}%</strong></p>
                 </div>
                 """, unsafe_allow_html=True
             )
 
-            # SHAP waterfall plot
             explainer = shap.TreeExplainer(model)
             shap_values = explainer.shap_values(df_input)
 
             st.subheader("Tahmin Açıklaması (SHAP Waterfall Plot)")
-
             fig, ax = plt.subplots(figsize=(12, 5))
             shap.plots._waterfall.waterfall_legacy(explainer.expected_value, shap_values[0], df_input.iloc[0], max_display=10, show=False)
             st.pyplot(fig)
             plt.close(fig)
 
-            # Risk skoruna göre öneri
             if pred == 1:
                 st.info("📌 Öneri: Eğitim programlarına katılmanız ve denetimli serbestlik programına dahil olmanız önerilir.")
             else:
@@ -110,9 +105,12 @@ def analysis_page():
     age_column = "Age_at_Release"
     gender_column = "Gender"
 
-    # Eksik değerleri atarak min max alıyoruz
-    age_min_val = int(df[age_column].dropna().min())
-    age_max_val = int(df[age_column].dropna().max())
+    df_clean = df.copy()
+    df_clean[age_column] = pd.to_numeric(df_clean[age_column], errors='coerce')
+    df_clean = df_clean.dropna(subset=[age_column, gender_column])
+
+    age_min_val = int(df_clean[age_column].min())
+    age_max_val = int(df_clean[age_column].max())
 
     age_min, age_max = st.sidebar.slider(
         "Yaş Aralığı",
@@ -121,34 +119,36 @@ def analysis_page():
         (age_min_val, age_max_val)
     )
 
-    gender_options = df[gender_column].dropna().unique().tolist()
+    gender_options = df_clean[gender_column].unique().tolist()
     gender_filter = st.sidebar.multiselect("Cinsiyet", options=gender_options, default=gender_options)
 
-    filtered_df = df[
-        (df[age_column] >= age_min) &
-        (df[age_column] <= age_max) &
-        (df[gender_column].isin(gender_filter))
+    filtered_df = df_clean[
+        (df_clean[age_column] >= age_min) &
+        (df_clean[age_column] <= age_max) &
+        (df_clean[gender_column].isin(gender_filter))
     ]
 
-    st.write(f"Toplam kayıt sayısı: {filtered_df.shape[0]}")
+    st.write(f"**Filtrelenmiş Kayıt Sayısı:** {filtered_df.shape[0]}")
 
-    # Recidivism sınıf dağılımı
     fig = px.histogram(filtered_df, x="Recidivism_Within_3years", color="Recidivism_Within_3years",
                        category_orders={"Recidivism_Within_3years": [0, 1]},
                        labels={"Recidivism_Within_3years": "3 Yıl İçinde Yeniden Suç"},
-                       title="Recidivism Sınıf Dağılımı")
+                       title="Recidivism Sınıf Dağılımı",
+                       color_discrete_map={0: "green", 1: "red"})
     st.plotly_chart(fig, use_container_width=True)
 
-    selected_feature = st.selectbox("Grafik için özellik seçin", options=feature_names)
+    selected_feature = st.selectbox("Özellik Seçin", options=feature_names)
 
     if selected_feature in cat_features or selected_feature in bool_cols:
         fig2 = px.histogram(filtered_df, x=selected_feature, color="Recidivism_Within_3years",
-                            category_orders={selected_feature: sorted(filtered_df[selected_feature].dropna().unique().tolist())},
                             title=f"{selected_feature} Dağılımı")
     else:
         fig2 = px.box(filtered_df, x="Recidivism_Within_3years", y=selected_feature,
                       title=f"{selected_feature} Değişkeninin Recidivism'a Göre Dağılımı")
     st.plotly_chart(fig2, use_container_width=True)
+
+    st.subheader("Özet İstatistikler")
+    st.dataframe(filtered_df.describe().T.style.background_gradient(cmap="viridis"))
 
 def performance_page():
     st.title("📈 Model Performansı")
@@ -174,22 +174,34 @@ def performance_page():
     st.pyplot(fig)
     plt.close(fig)
 
-    st.subheader("ROC Eğrisi (ROC Curve)")
-    try:
-        from sklearn.metrics import roc_curve, auc
-        if hasattr(model, "predict_proba"):
-            y_prob = model.predict_proba(X)[:, 1]
-            fpr, tpr, _ = roc_curve(y_true, y_prob)
-            roc_auc = auc(fpr, tpr)
-            fig2 = go.Figure()
-            fig2.add_trace(go.Scatter(x=fpr, y=tpr, mode='lines', name=f'AUC = {roc_auc:.2f}'))
-            fig2.add_trace(go.Scatter(x=[0,1], y=[0,1], mode='lines', line=dict(dash='dash')))
-            fig2.update_layout(title="ROC Eğrisi", xaxis_title='False Positive Rate', yaxis_title='True Positive Rate', width=700, height=500)
-            st.plotly_chart(fig2)
-        else:
-            st.warning("Model predict_proba özelliğine sahip değil, ROC çizilemiyor.")
-    except ImportError:
-        st.warning("scikit-learn paketinde ROC eğrisi için gerekli modüller eksik.")
+    st.subheader("ROC Eğrisi ve Precision-Recall Eğrisi")
+    if hasattr(model, "predict_proba"):
+        y_prob = model.predict_proba(X)[:, 1]
+        fpr, tpr, _ = roc_curve(y_true, y_prob)
+        precision, recall, _ = precision_recall_curve(y_true, y_prob)
+        roc_auc = auc(fpr, tpr)
+
+        fig_roc = px.area(
+            x=fpr, y=tpr,
+            title=f'ROC Eğrisi (AUC={roc_auc:.2f})',
+            labels=dict(x='False Positive Rate', y='True Positive Rate'),
+            width=700, height=400
+        )
+        fig_roc.add_shape(
+            type='line', line=dict(dash='dash'),
+            x0=0, x1=1, y0=0, y1=1
+        )
+        st.plotly_chart(fig_roc)
+
+        fig_pr = px.area(
+            x=recall, y=precision,
+            title='Precision-Recall Eğrisi',
+            labels=dict(x='Recall', y='Precision'),
+            width=700, height=400
+        )
+        st.plotly_chart(fig_pr)
+    else:
+        st.warning("Model predict_proba özelliğine sahip değil, ROC ve PR eğrisi çizilemiyor.")
 
 def feature_importance_page():
     st.title("📌 Özelliklerin Önemi ve Etkisi")
@@ -201,8 +213,6 @@ def feature_importance_page():
             X_for_shap[b] = X_for_shap[b].astype(str)
 
     shap_values = explainer.shap_values(X_for_shap)
-
-    st.write("Modelinizde en etkili özellikler:")
 
     st.subheader("Özelliklerin Genel Önemi (SHAP summary plot)")
     fig, ax = plt.subplots(figsize=(10, 6))
