@@ -1,9 +1,9 @@
 import streamlit as st
 
 def app():
-    st.title("🏛️ Prison Predict App")
+    st.title("🏠 Anasayfa")
     st.write("""
-    Bu uygulama, suç ve ceza verileri üzerinden tahminler, analizler ve tavsiyeler sunar.
-    Sol menüden sayfalar arasında geçiş yapabilirsiniz.
+    **Prison Predict App**'e hoş geldiniz!  
+    Bu uygulama, cezaevi verilerini analiz ederek tahminler yapar, öneriler sunar ve modelin detaylı analizlerini gösterir.
     """)
-    st.image("https://cdn.pixabay.com/photo/2016/06/09/17/59/prison-1448678_1280.jpg", use_column_width=True)
+    st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/f/f2/Prison_cells_in_Helsinki.jpg/640px-Prison_cells_in_Helsinki.jpg", caption="Temsili Cezaevi Görseli")
