@@ -1,97 +1,50 @@
-import sys
-import pandas as pd
-sys.modules['Index'] = pd.Index
-
+# pages/prediction.py
 import streamlit as st
+import pandas as pd
 import joblib
 import numpy as np
-import os
 
-st.set_page_config(page_title="Tahmin Modeli", layout="wide")
+st.set_page_config(page_title="Tahmin Sayfası", page_icon="🔍", layout="wide")
+st.title("🔍 Tahmin Sayfası")
+st.write("Lütfen aşağıdaki formu doldurarak tahmin alın.")
 
-@st.cache_data(show_spinner=True)
-def load_model_files():
-    try:
-        base_path = os.path.dirname(__file__)
-        model = joblib.load(os.path.join(base_path, "catboost_model.pkl"))
-        bool_cols = joblib.load(os.path.join(base_path, "bool_columns.pkl"))
-        cat_features = joblib.load(os.path.join(base_path, "cat_features.pkl"))
-        feature_names = joblib.load(os.path.join(base_path, "feature_names.pkl"))
-        cat_unique_values = joblib.load(os.path.join(base_path, "cat_unique_values.pkl"))
-        return model, bool_cols, cat_features, feature_names, cat_unique_values
-    except Exception as e:
-        st.error(f"Model dosyaları yüklenirken hata oluştu: {e}")
-        return None, None, None, None, None
+# Model ve yardımcı dosyaları yükle
+model = joblib.load("catboost_model.pkl")
+feature_names = joblib.load("feature_names.pkl")
+cat_features = joblib.load("cat_features.pkl")
+bool_columns = joblib.load("bool_columns.pkl")
+cat_unique_values = joblib.load("cat_unique_values.pkl")
 
-def convert_age_range(age_str):
-    if pd.isna(age_str):
-        return np.nan
-    age_str = str(age_str).strip()
-    if "-" in age_str:
-        parts = age_str.split("-")
-        try:
-            low = int(parts[0])
-            high = int(parts[1])
-            return (low + high) / 2
-        except:
-            return np.nan
-    elif "or older" in age_str:
-        try:
-            low = int(age_str.split()[0])
-            return low + 2
-        except:
-            return np.nan
-    else:
-        try:
-            return float(age_str)
-        except:
-            return np.nan
+# Kullanıcı girişlerini saklamak için sözlük
+user_input = {}
 
-def main():
-    st.title("📊 Tahmin Modeli")
-
-    model, bool_cols, cat_features, feature_names, cat_unique_values = load_model_files()
-    if model is None:
-        return
-
-    st.info("Model yüklendi. Lütfen tahmin için gerekli bilgileri doldurun.")
-
-    input_data = {}
-
-    for feat in feature_names:
-        if feat == "Age_at_Release":
-            options = ["18-22", "23-27", "28-32", "33-37", "38-42", "43-47", "48 or older"]
-            input_data[feat] = st.selectbox(f"{feat} seçin", options)
-        elif feat in bool_cols:
-            val = st.selectbox(f"{feat} (bool)", ["False", "True"])
-            input_data[feat] = True if val == "True" else False
-        elif feat in cat_features:
-            options = cat_unique_values.get(feat, [])
+with st.form("prediction_form"):
+    for feature in feature_names:
+        if feature in bool_columns:
+            user_input[feature] = st.checkbox(feature, value=False)
+        elif feature in cat_features:
+            options = cat_unique_values.get(feature, [])
             if options:
-                input_data[feat] = st.selectbox(f"{feat} seçin", options)
+                user_input[feature] = st.selectbox(feature, options)
             else:
-                input_data[feat] = st.text_input(f"{feat} girin")
+                user_input[feature] = st.text_input(feature, "")
         else:
-            input_data[feat] = st.number_input(f"{feat} girin", value=0)
+            user_input[feature] = st.number_input(feature, value=0.0, step=1.0)
 
-    if st.button("Tahmin Et"):
-        X_pred = pd.DataFrame([input_data], columns=feature_names)
+    submitted = st.form_submit_button("📊 Tahmin Et")
 
-        if "Age_at_Release" in X_pred.columns:
-            X_pred["Age_at_Release"] = X_pred["Age_at_Release"].apply(convert_age_range)
+if submitted:
+    # DataFrame oluştur
+    input_df = pd.DataFrame([user_input])
 
-        for col in bool_cols:
-            if col in X_pred.columns:
-                X_pred[col] = X_pred[col].astype(str)
+    # Bool değerleri int'e çevir
+    for col in bool_columns:
+        if col in input_df.columns:
+            input_df[col] = input_df[col].astype(int)
 
-        try:
-            pred_prob = model.predict_proba(X_pred)[:,1][0]
-            pred_class = model.predict(X_pred)[0]
+    # Tahmin yap
+    prediction = model.predict(input_df)[0]
+    proba = model.predict_proba(input_df)[0]
 
-            st.success(f"✅ Tahmin Sonucu: {'Tekrar Suç İşledi' if pred_class == 1 else 'Tekrar Suç İşlemedi'}")
-            st.info(f"📊 Yeniden Suç İşleme Olasılığı: %{pred_prob*100:.2f}")
-        except Exception as e:
-            st.error(f"Tahmin sırasında hata oluştu: {e}")
-
-if __name__ == "__main__":
-    main()
+    st.success(f"📌 Tahmin Sonucu: **{prediction}**")
+    st.info(f"📈 Olasılıklar: {dict(zip(model.classes_, np.round(proba, 3)))}")
