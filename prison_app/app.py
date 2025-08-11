@@ -276,29 +276,9 @@ def home_page(df):
 
     st.caption(f"📂 Repo: https://github.com/Yasinaslann/PrisonPredictApp • {APP_VERSION}")
 
-def placeholder_page(name):
-    st.title(name)
-    st.info("Bu sayfa henüz hazırlanmadı. 'Ana Sayfa' hazırlandıktan sonra geliştirilecektir.")
-
 def main():
     df = load_data()
-
-    st.sidebar.title("Navigasyon")
-    page = st.sidebar.radio(
-        "Sayfa seçin",
-        (
-            "Ana Sayfa",
-            "Tavsiye ve Profil Analizi",
-            "Model Analizleri ve Harita",
-        ),
-    )
-
-    if page == "Ana Sayfa":
-        home_page(df)
-    elif page == "Tavsiye ve Profil Analizi":
-        placeholder_page("💡 Tavsiye ve Profil Analizi (Hazırlanıyor)")
-    elif page == "Model Analizleri ve Harita":
-        placeholder_page("📈 Model Analizleri ve Harita (Hazırlanıyor)")
+    home_page(df)
 
 if __name__ == "__main__":
     main()
