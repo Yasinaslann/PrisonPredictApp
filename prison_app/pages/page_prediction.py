@@ -1,94 +1,71 @@
-# prison_app/pages/2_🤖_Tahmin_Modeli.py
 import streamlit as st
 import pandas as pd
 import numpy as np
 import pickle
 from pathlib import Path
 
-st.set_page_config(page_title="Tahmin Modeli", page_icon="🤖")
-
-BASE = Path(__file__).resolve().parents[1]
+# Dosya yolları (app.py ile aynı dizindeyse, uygun path ayarla)
+BASE = Path(__file__).parent.parent  # pages klasörünün bir üstü
 MODEL_PATH = BASE / "catboost_model.pkl"
 FEATURES_PATH = BASE / "feature_names.pkl"
-BOOL_COLS = BASE / "bool_columns.pkl"
-CAT_FEATURES = BASE / "cat_features.pkl"
-CAT_UNIQUES = BASE / "cat_unique_values.pkl"
+CAT_FEATURES_PATH = BASE / "cat_features.pkl"
+CAT_UNIQUE_PATH = BASE / "cat_unique_values.pkl"
 
-st.title("🤖 Tahmin Modeli")
-st.markdown("Bireysel veriyi girerek tekrar suç tahmini alabilirsiniz. Tüm alanları doldurarak `Tahmin Al` butonuna basın.")
+@st.cache_resource(show_spinner=False)
+def load_model():
+    with open(MODEL_PATH, "rb") as f:
+        model = pickle.load(f)
+    return model
 
-# yükle dataset sample (opsiyonel)
-sample_df = None
-try:
-    sample_df = pd.read_csv(BASE / "Prisongüncelveriseti.csv")
-except Exception:
-    pass
+@st.cache_data(show_spinner=False)
+def load_feature_names():
+    with open(FEATURES_PATH, "rb") as f:
+        features = pickle.load(f)
+    return features
 
-if sample_df is not None:
-    st.info("Veri setinden türetilen giriş formu için örnek sütunlar kullanılıyor.")
-    columns = sample_df.columns.tolist()
-else:
-    # fallback generic features
-    columns = ["suç_tipi","ceza_ay","egitim_durumu","gecmis_suc_sayisi","il"]
+@st.cache_data(show_spinner=False)
+def load_cat_features():
+    with open(CAT_FEATURES_PATH, "rb") as f:
+        cat_features = pickle.load(f)
+    return cat_features
 
-# Dinamik form: eğer feature_names.pkl varsa ona göre, yoksa yukarıdaki columns
-feature_names = None
-try:
-    with open(FEATURES_PATH,"rb") as f:
-        feature_names = pickle.load(f)
-except Exception:
-    feature_names = columns
+@st.cache_data(show_spinner=False)
+def load_cat_uniques():
+    with open(CAT_UNIQUE_PATH, "rb") as f:
+        cat_uniques = pickle.load(f)
+    return cat_uniques
 
-# Build form with sensible defaults
-with st.form("giris_formu"):
-    inputs = {}
+def main():
+    st.title("📊 Tahmin Modeli")
+
+    model = load_model()
+    feature_names = load_feature_names()
+    cat_features = load_cat_features()
+    cat_uniques = load_cat_uniques()
+
+    st.write("Mahpusların yeniden suç işleme riskini tahmin etmek için bilgileri doldurun.")
+
+    # Kullanıcıdan input alma (feature_names listesine göre dinamik yapabiliriz)
+    input_data = {}
     for feat in feature_names:
-        # heuristic types
-        if "ay" in feat or "sayi" in feat or "gecmis" in feat or "ceza" in feat:
-            inputs[feat] = st.number_input(feat, min_value=0, max_value=1000, value=0)
-        elif "or" in feat or feat.lower().startswith("is_") or feat.lower().startswith("has_"):
-            inputs[feat] = st.selectbox(feat, [0,1])
+        if feat in cat_features:
+            options = cat_uniques.get(feat, [])
+            input_data[feat] = st.selectbox(f"{feat} seçiniz:", options)
         else:
-            # categorical / text
-            inputs[feat] = st.text_input(feat, value="")
+            # Sayısal özellik varsayıyoruz, aralığı dataset özelliklerine göre ayarla
+            input_data[feat] = st.number_input(f"{feat} giriniz:", value=0)
 
-    submitted = st.form_submit_button("🔎 Tahmin Al")
+    if st.button("Tahmin Et"):
+        # Model giriş formatına göre DataFrame yap
+        X = pd.DataFrame([input_data])
 
-if submitted:
-    # prepare input vector
-    X = pd.DataFrame([inputs])
-    model = None
-    try:
-        with open(MODEL_PATH,"rb") as f:
-            model = pickle.load(f)
-    except Exception as e:
-        st.error("Eğitilmiş model (catboost_model.pkl) bulunamadı veya yüklenemedi. Lütfen model dosyasını /prison_app/ içine koyun.\n\nDetay: " + str(e))
-        st.info("Geçici olarak demo mantığı: geçmiş_suc_sayisi > 1 ise yüksek risk, değilse düşük risk")
-        # very simple rule fallback
-        score = 0.75 if ("gecmis_suc_sayisi" in X.columns and X.loc[0,"gecmis_suc_sayisi"] > 1) else 0.12
-        label = "Yüksek risk" if score > 0.5 else "Düşük risk"
-        st.metric("Tahmin", label, delta=f"%{score*100:.1f} risk skoru")
-    else:
+        # Eğer model CatBoost ise, cat_features parametresi ile tahmin yapabiliriz
         try:
-            proba = None
-            # scikit-like API
-            if hasattr(model, "predict_proba"):
-                proba = model.predict_proba(X)[0]
-                # if binary: proba for positive class
-                if proba.shape[0] and len(proba) == 2:
-                    score = proba[1]
-                else:
-                    # multiclass: take max prob class's score
-                    score = float(np.max(proba))
-                pred = model.predict(X)[0]
-            else:
-                # catboost/fallback predict
-                pred = model.predict(X)
-                score = float(pred[0]) if hasattr(pred, "__len__") else float(pred)
-            label = "Tekrar suç işleme (olası)" if score > 0.5 else "Tekrar suç işleme (düşük olasılık)"
-            st.success(f"🔔 Tahmin: {label}")
-            st.progress(int(min(max(score,0),1)*100))
-            st.write(f"**Güven skoru:** {score:.3f}")
-            st.write("Model çıktısı (ham):", pred)
+            preds = model.predict_proba(X)[:, 1]  # Pozitif sınıf olasılığı
+            risk_score = preds[0]
+            st.success(f"Yeniden Suç İşleme Risk Skoru: %{risk_score*100:.2f}")
         except Exception as e:
-            st.error("Model çalıştırılırken hata oluştu: " + str(e))
+            st.error(f"Tahmin yapılırken hata oluştu: {e}")
+
+if __name__ == "__main__":
+    main()
