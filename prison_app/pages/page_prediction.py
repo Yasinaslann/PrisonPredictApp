@@ -3,12 +3,15 @@ import pandas as pd
 from pathlib import Path
 import pickle
 
-st.set_page_config(page_title="Tahmin Modeli - Yeniden Suç İşleme", page_icon="📊")
+st.set_page_config(
+    page_title="Tahmin Modeli",
+    page_icon="📊",
+)
 
-BASE = Path(__file__).parent.parent
+BASE = Path(__file__).parent.parent  # Proje kökü
 
 @st.cache_data(show_spinner=False)
-def load_model_and_features():
+def load_model_files():
     try:
         with open(BASE / "catboost_model.pkl", "rb") as f:
             model = pickle.load(f)
@@ -28,11 +31,11 @@ def load_model_and_features():
 def main():
     st.title("📊 Tahmin Modeli")
 
-    model, feature_names, bool_columns, cat_features, cat_unique_values = load_model_and_features()
+    model, feature_names, bool_columns, cat_features, cat_unique_values = load_model_files()
     if model is None:
         return
 
-    st.markdown("Lütfen tahmin yapmak için aşağıdaki bilgileri giriniz:")
+    st.markdown("Lütfen tahmin yapmak için bilgileri giriniz:")
 
     inputs = {}
 
