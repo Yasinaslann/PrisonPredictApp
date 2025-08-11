@@ -286,13 +286,15 @@ def main():
     st.sidebar.title("Navigasyon")
     page = st.sidebar.radio(
         "Sayfa seçin",
-        ("Ana Sayfa", "Tahmin Modeli", "Tavsiye ve Profil Analizi", "Model Analizleri ve Harita"),
+        (
+            "Ana Sayfa",
+            "Tavsiye ve Profil Analizi",
+            "Model Analizleri ve Harita",
+        ),
     )
 
     if page == "Ana Sayfa":
         home_page(df)
-    elif page == "Tahmin Modeli":
-        st.info("Lütfen sol menüden 'Tahmin Modeli' sayfasına geçiniz.")  # Kullanıcıyı yönlendirmek için
     elif page == "Tavsiye ve Profil Analizi":
         placeholder_page("💡 Tavsiye ve Profil Analizi (Hazırlanıyor)")
     elif page == "Model Analizleri ve Harita":
