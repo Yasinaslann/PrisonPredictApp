@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objects as go
 from pathlib import Path
 import pickle
 
@@ -278,66 +277,6 @@ def home_page(df):
 
     st.caption(f"📂 Repo: https://github.com/Yasinaslann/PrisonPredictApp • {APP_VERSION}")
 
-def predict_page():
-    st.title("📊 Tahmin Modeli")
-
-    # Model, özellikler ve label encoder gibi dosyaları yükle
-    try:
-        model_path = BASE / "catboost_model.pkl"
-        features_path = BASE / "feature_names.pkl"
-        bool_cols_path = BASE / "bool_columns.pkl"
-        cat_features_path = BASE / "cat_features.pkl"
-        cat_unique_path = BASE / "cat_unique_values.pkl"
-
-        with open(model_path, "rb") as f:
-            model = pickle.load(f)
-        with open(features_path, "rb") as f:
-            feature_names = pickle.load(f)
-        with open(bool_cols_path, "rb") as f:
-            bool_columns = pickle.load(f)
-        with open(cat_features_path, "rb") as f:
-            cat_features = pickle.load(f)
-        with open(cat_unique_path, "rb") as f:
-            cat_unique_values = pickle.load(f)
-    except Exception as e:
-        st.error(f"Model dosyaları yüklenirken hata oluştu: {e}")
-        return
-
-    st.markdown("Lütfen tahmin yapmak için aşağıdaki bilgileri giriniz:")
-
-    # Kullanıcıdan inputlar al (örnek)
-    inputs = {}
-
-    # Kategorik örnek
-    for cat_feat in cat_features:
-        options = cat_unique_values.get(cat_feat, [])
-        inputs[cat_feat] = st.selectbox(f"{cat_feat.replace('_',' ')} seçin:", options)
-
-    # Boolean kolonlar için checkbox (örnek)
-    for bool_col in bool_columns:
-        inputs[bool_col] = st.checkbox(f"{bool_col.replace('_',' ')}")
-
-    # Numeric feature input (örnek, tahmini kolaylaştırmak için)
-    # Burada örnek olarak "Sentence_Length_Months" alabiliriz:
-    if "Sentence_Length_Months" in feature_names:
-        inputs["Sentence_Length_Months"] = st.number_input("Ceza Süresi (Ay)", min_value=0, max_value=600, value=12)
-
-    # Model için dataframe hazırla
-    input_df = pd.DataFrame([inputs], columns=feature_names)
-
-    if st.button("Tahmin Et"):
-        try:
-            pred_proba = model.predict_proba(input_df)[0][1]  # Pozitif sınıf olasılığı
-            pred_label = model.predict(input_df)[0]
-            st.success(f"Yeniden suç işleme olasılığı: %{pred_proba*100:.2f}")
-            st.info(f"Tahmin sonucu: {'Tekrar suç işleyebilir' if pred_label == 1 else 'Tekrar suç işlemez'}")
-        except Exception as e:
-            st.error(f"Tahmin sırasında hata oluştu: {e}")
-
-def placeholder_page(name):
-    st.title(name)
-    st.info("Bu sayfa henüz hazırlanmadı. 'Ana Sayfa' hazırlandıktan sonra geliştirilecektir.")
-
 def main():
     df = load_data()
 
@@ -350,11 +289,11 @@ def main():
     if page == "Ana Sayfa":
         home_page(df)
     elif page == "Tahmin Modeli":
-        predict_page()
-    elif page == "Tavsiye ve Profil Analizi":
-        placeholder_page("💡 Tavsiye ve Profil Analizi (Hazırlanıyor)")
-    elif page == "Model Analizleri ve Harita":
-        placeholder_page("📈 Model Analizleri ve Harita (Hazırlanıyor)")
+        # Bu sayfa için önerim ayrı bir dosya olarak pages klasöründe tutmak,
+        # ancak buraya da aşağıdaki predict_page fonksiyonunu koyabilirsin.
+        st.info("Tahmin sayfası için ayrı bir sayfa kullanınız: pages/page_prediction.py")
+    else:
+        st.info(f"'{page}' sayfası henüz hazırlanıyor.")
 
 if __name__ == "__main__":
     main()
