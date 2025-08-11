@@ -2,35 +2,32 @@ import streamlit as st
 import pickle
 import pandas as pd
 
-# Model ve gerekli dosyaları yükleme
-@st.cache_resource
-def load_model():
-    model = pickle.load(open("catboost_model.pkl", "rb"))
-    bool_columns = pickle.load(open("bool_columns.pkl", "rb"))
-    cat_features = pickle.load(open("cat_features.pkl", "rb"))
-    feature_names = pickle.load(open("feature_names.pkl", "rb"))
-    return model, bool_columns, cat_features, feature_names
+def load_pickle(file_path):
+    with open(file_path, "rb") as f:
+        return pickle.load(f)
 
-model, bool_columns, cat_features, feature_names = load_model()
+# Model ve yardımcı dosyaları yükleme
+model = load_pickle("catboost_model.pkl")
+feature_names = load_pickle("feature_names.pkl")
+cat_features = load_pickle("cat_features.pkl")
+bool_columns = load_pickle("bool_columns.pkl")
+cat_unique_values = load_pickle("cat_unique_values.pkl")
 
-st.title("🧾 Suç İşleme Tahmin Sayfası")
-st.markdown("Tahliye edilen kişinin yeniden suç işleme olasılığını tahmin edin.")
+def app():
+    st.title("📊 Tahmin Modeli")
+    st.write("Gerekli bilgileri girerek tahmin alabilirsiniz.")
 
-# Kullanıcıdan veri alma (örnek giriş alanları)
-user_data = {}
-for feature in feature_names:
-    if feature in bool_columns:
-        user_data[feature] = st.selectbox(f"{feature}", [0, 1])
-    elif feature in cat_features:
-        user_data[feature] = st.text_input(f"{feature}")
-    else:
-        user_data[feature] = st.number_input(f"{feature}", step=1)
+    user_input = {}
+    for col in feature_names:
+        if col in bool_columns:
+            val = st.selectbox(col, [0, 1])
+        elif col in cat_features:
+            val = st.selectbox(col, cat_unique_values[col])
+        else:
+            val = st.number_input(col, step=1.0)
+        user_input[col] = val
 
-# Tahmin butonu
-if st.button("Tahmin Yap"):
-    df_input = pd.DataFrame([user_data])
-    prediction = model.predict(df_input)[0]
-    if prediction == 1:
-        st.error("⚠ Yüksek risk: Kişi yeniden suç işleyebilir.")
-    else:
-        st.success("✅ Düşük risk: Kişi yeniden suç işleme olasılığı düşük.")
+    if st.button("Tahmin Yap"):
+        df = pd.DataFrame([user_input])
+        pred = model.predict(df)[0]
+        st.success(f"Model Tahmini: **{pred}**")
