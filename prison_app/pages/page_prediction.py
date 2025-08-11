@@ -1,22 +1,23 @@
-import streamlit as st
+import sys
 import pandas as pd
+sys.modules['Index'] = pd.Index
+
+import streamlit as st
 import joblib
 import numpy as np
-import sys
-
-# İşte bu satır kesinlikle olmalı, bu hata için:
-sys.modules['Index'] = pd.Index
+import os
 
 st.set_page_config(page_title="Tahmin Modeli", layout="wide")
 
 @st.cache_data(show_spinner=True)
 def load_model_files():
     try:
-        model = joblib.load("catboost_model.pkl")
-        bool_cols = joblib.load("bool_columns.pkl")
-        cat_features = joblib.load("cat_features.pkl")
-        feature_names = joblib.load("feature_names.pkl")
-        cat_unique_values = joblib.load("cat_unique_values.pkl")
+        base_path = os.path.dirname(__file__)
+        model = joblib.load(os.path.join(base_path, "catboost_model.pkl"))
+        bool_cols = joblib.load(os.path.join(base_path, "bool_columns.pkl"))
+        cat_features = joblib.load(os.path.join(base_path, "cat_features.pkl"))
+        feature_names = joblib.load(os.path.join(base_path, "feature_names.pkl"))
+        cat_unique_values = joblib.load(os.path.join(base_path, "cat_unique_values.pkl"))
         return model, bool_cols, cat_features, feature_names, cat_unique_values
     except Exception as e:
         st.error(f"Model dosyaları yüklenirken hata oluştu: {e}")
