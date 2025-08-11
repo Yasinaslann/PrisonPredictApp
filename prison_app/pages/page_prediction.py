@@ -3,40 +3,32 @@ import pandas as pd
 from pathlib import Path
 import pickle
 
-st.set_page_config(
-    page_title="Tahmin Modeli",
-    page_icon="📊"
-)
+st.set_page_config(page_title="Tahmin Modeli - Yeniden Suç İşleme", page_icon="📊")
 
 BASE = Path(__file__).parent.parent
 
-def load_model_files():
+@st.cache_data(show_spinner=False)
+def load_model_and_features():
     try:
-        model_path = BASE / "catboost_model.pkl"
-        features_path = BASE / "feature_names.pkl"
-        bool_cols_path = BASE / "bool_columns.pkl"
-        cat_features_path = BASE / "cat_features.pkl"
-        cat_unique_path = BASE / "cat_unique_values.pkl"
-
-        with open(model_path, "rb") as f:
+        with open(BASE / "catboost_model.pkl", "rb") as f:
             model = pickle.load(f)
-        with open(features_path, "rb") as f:
+        with open(BASE / "feature_names.pkl", "rb") as f:
             feature_names = pickle.load(f)
-        with open(bool_cols_path, "rb") as f:
+        with open(BASE / "bool_columns.pkl", "rb") as f:
             bool_columns = pickle.load(f)
-        with open(cat_features_path, "rb") as f:
+        with open(BASE / "cat_features.pkl", "rb") as f:
             cat_features = pickle.load(f)
-        with open(cat_unique_path, "rb") as f:
+        with open(BASE / "cat_unique_values.pkl", "rb") as f:
             cat_unique_values = pickle.load(f)
         return model, feature_names, bool_columns, cat_features, cat_unique_values
     except Exception as e:
         st.error(f"Model dosyaları yüklenirken hata oluştu: {e}")
         return None, None, None, None, None
 
-def page_prediction():
+def main():
     st.title("📊 Tahmin Modeli")
 
-    model, feature_names, bool_columns, cat_features, cat_unique_values = load_model_files()
+    model, feature_names, bool_columns, cat_features, cat_unique_values = load_model_and_features()
     if model is None:
         return
 
@@ -46,10 +38,10 @@ def page_prediction():
 
     for cat_feat in cat_features:
         options = cat_unique_values.get(cat_feat, [])
-        inputs[cat_feat] = st.selectbox(f"{cat_feat.replace('_', ' ')} seçin:", options)
+        inputs[cat_feat] = st.selectbox(f"{cat_feat.replace('_',' ')} seçin:", options)
 
     for bool_col in bool_columns:
-        inputs[bool_col] = st.checkbox(f"{bool_col.replace('_', ' ')}")
+        inputs[bool_col] = st.checkbox(f"{bool_col.replace('_',' ')}")
 
     if "Sentence_Length_Months" in feature_names:
         inputs["Sentence_Length_Months"] = st.number_input(
@@ -68,4 +60,4 @@ def page_prediction():
             st.error(f"Tahmin sırasında hata oluştu: {e}")
 
 if __name__ == "__main__":
-    page_prediction()
+    main()
