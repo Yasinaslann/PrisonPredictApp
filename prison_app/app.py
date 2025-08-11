@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 from pathlib import Path
-import pickle
 
 st.set_page_config(
     page_title="Yeniden Suç İşleme Tahmin Uygulaması",
@@ -277,6 +276,10 @@ def home_page(df):
 
     st.caption(f"📂 Repo: https://github.com/Yasinaslann/PrisonPredictApp • {APP_VERSION}")
 
+def placeholder_page(name):
+    st.title(name)
+    st.info("Bu sayfa henüz hazırlanmadı. 'Ana Sayfa' hazırlandıktan sonra geliştirilecektir.")
+
 def main():
     df = load_data()
 
@@ -289,11 +292,12 @@ def main():
     if page == "Ana Sayfa":
         home_page(df)
     elif page == "Tahmin Modeli":
-        # Bu sayfa için önerim ayrı bir dosya olarak pages klasöründe tutmak,
-        # ancak buraya da aşağıdaki predict_page fonksiyonunu koyabilirsin.
-        st.info("Tahmin sayfası için ayrı bir sayfa kullanınız: pages/page_prediction.py")
-    else:
-        st.info(f"'{page}' sayfası henüz hazırlanıyor.")
+        # Tahmin sayfasını ayrı olarak pages/page_prediction.py'de kullanacağız
+        st.info("Tahmin sayfası için lütfen sol menüden 'Tahmin Modeli' sayfasına geçiniz veya 'pages/page_prediction.py' dosyasını açınız.")
+    elif page == "Tavsiye ve Profil Analizi":
+        placeholder_page("💡 Tavsiye ve Profil Analizi (Hazırlanıyor)")
+    elif page == "Model Analizleri ve Harita":
+        placeholder_page("📈 Model Analizleri ve Harita (Hazırlanıyor)")
 
 if __name__ == "__main__":
     main()
