@@ -1,50 +1,48 @@
-# pages/prediction.py
 import streamlit as st
 import pandas as pd
-import joblib
-import numpy as np
+import pickle
+from pathlib import Path
 
-st.set_page_config(page_title="Tahmin Sayfası", page_icon="🔍", layout="wide")
-st.title("🔍 Tahmin Sayfası")
-st.write("Lütfen aşağıdaki formu doldurarak tahmin alın.")
+st.title("📊 Tahmin Modeli")
 
-# Model ve yardımcı dosyaları yükle
-model = joblib.load("catboost_model.pkl")
-feature_names = joblib.load("feature_names.pkl")
-cat_features = joblib.load("cat_features.pkl")
-bool_columns = joblib.load("bool_columns.pkl")
-cat_unique_values = joblib.load("cat_unique_values.pkl")
+BASE = Path(__file__).parent.parent
 
-# Kullanıcı girişlerini saklamak için sözlük
-user_input = {}
+# Model dosyalarını yükle
+try:
+    model = pickle.load(open(BASE / "catboost_model.pkl", "rb"))
+    feature_names = pickle.load(open(BASE / "feature_names.pkl", "rb"))
+    bool_columns = pickle.load(open(BASE / "bool_columns.pkl", "rb"))
+    cat_features = pickle.load(open(BASE / "cat_features.pkl", "rb"))
+    cat_unique_values = pickle.load(open(BASE / "cat_unique_values.pkl", "rb"))
+except FileNotFoundError as e:
+    st.error(f"❌ Model dosyası bulunamadı: {e}")
+    st.stop()
 
-with st.form("prediction_form"):
-    for feature in feature_names:
-        if feature in bool_columns:
-            user_input[feature] = st.checkbox(feature, value=False)
-        elif feature in cat_features:
-            options = cat_unique_values.get(feature, [])
-            if options:
-                user_input[feature] = st.selectbox(feature, options)
-            else:
-                user_input[feature] = st.text_input(feature, "")
-        else:
-            user_input[feature] = st.number_input(feature, value=0.0, step=1.0)
+# Kullanıcıdan giriş alma
+inputs = {}
+for cat_feat in cat_features:
+    options = cat_unique_values.get(cat_feat, [])
+    inputs[cat_feat] = st.selectbox(f"{cat_feat.replace('_',' ')}", options)
 
-    submitted = st.form_submit_button("📊 Tahmin Et")
+for bool_col in bool_columns:
+    inputs[bool_col] = st.checkbox(f"{bool_col.replace('_',' ')}")
 
-if submitted:
-    # DataFrame oluştur
-    input_df = pd.DataFrame([user_input])
+if "Sentence_Length_Months" in feature_names:
+    inputs["Sentence_Length_Months"] = st.number_input("Ceza Süresi (Ay)", 0, 600, 12)
 
-    # Bool değerleri int'e çevir
-    for col in bool_columns:
-        if col in input_df.columns:
-            input_df[col] = input_df[col].astype(int)
+# Eksik özellikleri 0 ile doldur
+for feat in feature_names:
+    if feat not in inputs:
+        inputs[feat] = 0
 
-    # Tahmin yap
-    prediction = model.predict(input_df)[0]
-    proba = model.predict_proba(input_df)[0]
+input_df = pd.DataFrame([inputs], columns=feature_names)
 
-    st.success(f"📌 Tahmin Sonucu: **{prediction}**")
-    st.info(f"📈 Olasılıklar: {dict(zip(model.classes_, np.round(proba, 3)))}")
+# Tahmin butonu
+if st.button("Tahmin Et"):
+    try:
+        pred_proba = model.predict_proba(input_df)[0][1]
+        pred_label = model.predict(input_df)[0]
+        st.success(f"📊 Olasılık: %{pred_proba*100:.2f}")
+        st.info("🔍 Tahmin: " + ("Tekrar suç işleyebilir" if pred_label == 1 else "Tekrar suç işlemez"))
+    except Exception as e:
+        st.error(f"⚠️ Hata: {e}")
