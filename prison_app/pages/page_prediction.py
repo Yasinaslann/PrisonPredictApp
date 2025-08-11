@@ -3,7 +3,7 @@ import pandas as pd
 from pathlib import Path
 import pickle
 
-BASE = Path(__file__).parent.parent  # prison_app klasörünün üstü, model dosyaları burada
+BASE = Path(__file__).parent.parent  # prison_app klasörü
 
 def load_model_files():
     try:
@@ -39,16 +39,16 @@ def page_prediction():
 
     inputs = {}
 
-    # Kategorik özellikler
+    # Kategorik özellikler için seçim
     for cat_feat in cat_features:
         options = cat_unique_values.get(cat_feat, [])
         inputs[cat_feat] = st.selectbox(f"{cat_feat.replace('_', ' ')} seçin:", options)
 
-    # Boolean özellikler
+    # Boolean özellikler için checkbox
     for bool_col in bool_columns:
         inputs[bool_col] = st.checkbox(f"{bool_col.replace('_', ' ')}")
 
-    # Sayısal örnek: Ceza süresi
+    # Sayısal özellik örneği: Ceza süresi
     if "Sentence_Length_Months" in feature_names:
         inputs["Sentence_Length_Months"] = st.number_input(
             "Ceza Süresi (Ay)", min_value=0, max_value=600, value=12
