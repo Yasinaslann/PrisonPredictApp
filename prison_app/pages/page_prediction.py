@@ -1,16 +1,25 @@
 import streamlit as st
 import pickle
 import pandas as pd
+from pathlib import Path
 
 def app():
     st.title("📊 Tahmin Modeli")
     st.write("Burada CatBoost modeli ile tahmin yapabilirsiniz.")
 
-    # Model ve özellikler yükleniyor
-    with open("catboost_model.pkl", "rb") as f:
-        model = pickle.load(f)
-    with open("feature_names.pkl", "rb") as f:
-        feature_names = pickle.load(f)
+    base_dir = Path(__file__).parent.parent
+
+    model_path = base_dir / "catboost_model.pkl"
+    feature_path = base_dir / "feature_names.pkl"
+
+    try:
+        with open(model_path, "rb") as f:
+            model = pickle.load(f)
+        with open(feature_path, "rb") as f:
+            feature_names = pickle.load(f)
+    except FileNotFoundError as e:
+        st.error(f"Model veya özellik dosyası bulunamadı: {e}")
+        return
 
     st.subheader("Veri Girişi")
     user_input = {}
