@@ -1,9 +1,14 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
+from pathlib import Path
 import plotly.express as px
 import plotly.graph_objects as go
-from pathlib import Path
+from datetime import datetime
 
+# -------------------------
+# Sayfa genel yapılandırması
+# -------------------------
 st.set_page_config(
     page_title="Yeniden Suç İşleme Tahmin Uygulaması",
     page_icon="⚖️",
@@ -154,59 +159,53 @@ def home_page(df):
 
     st.markdown("---")
 
-    # --- Veri Önizleme (Açılır/Kapanır, 15 satır) ---
-    with st.expander("📂 Veri Seti Önizlemesi (İlk 15 Satır)", expanded=False):
-        st.dataframe(df.head(15), use_container_width=True)
+    # --- Burada sadece bu kısım değiştirdi, diğer tüm kod aynen duruyor ---
+
+    # --- Veri seti önizleme (10 satır)
+    with st.expander("📂 Veri Seti Önizlemesi (İlk 10 Satır)"):
+        st.dataframe(df.head(10), use_container_width=True)
 
     st.markdown("---")
 
-    # --- DONUT GRAFİK: Yeniden Suç İşleme Oranı ---
-    st.subheader("🎯 Yeniden Suç İşleme Oranı (Donut Grafik)")
+    recid_col = next((c for c in df.columns if "recid" in c.lower()), None)
 
-    recid_col = "Recidivism" if "Recidivism" in df.columns else None
-    if recid_col and not df[recid_col].dropna().empty:
-        counts = df[recid_col].value_counts().reindex([0, 1], fill_value=0)
-        labels = ["Tekrar Suç İşlemedi", "Tekrar Suç İşledi"]
-        values = counts.values
-
-        fig = go.Figure(data=[go.Pie(
-            labels=labels,
-            values=values,
-            hole=0.5,
-            marker=dict(colors=['#10b981', '#ef4444']),
-            pull=[0, 0.1],
-            textinfo='percent+label',
-            textfont=dict(size=16, family='Segoe UI')
-        )])
-        fig.update_layout(title_text="3 Yıl İçinde Yeniden Suç İşleme Oranı", title_x=0.5, template="plotly_white")
-        st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.info("Yeniden suç işleme verisi bulunmamaktadır.")
-
-    st.markdown(info_box("Bu donut grafik, tahliye sonrası mahpusların yeniden suç işleme durumunu yüzdesel olarak gösterir. 'Tekrar Suç İşledi' dilimi öne çıkarılmıştır."))
+    # --- Yeniden Suç İşleme Oranı Pasta Grafiği ---
+    st.subheader("🎯 Yeniden Suç İşleme Oranı (Pasta Grafiği)")
+    col1, col2 = st.columns([3,1])
+    with col1:
+        if recid_col and recid_col in df.columns:
+            counts = df[recid_col].value_counts().sort_index()
+            labels = ["Tekrar Suç İşlemedi", "Tekrar Suç İşledi"]
+            values = [counts.get(0, 0), counts.get(1, 0)]
+            fig = px.pie(
+                names=labels, values=values,
+                title="3 Yıl İçinde Yeniden Suç İşleme Oranı",
+                color_discrete_sequence=px.colors.sequential.RdBu
+            )
+            fig.update_traces(textposition='inside', textinfo='percent+label', pull=[0, 0.1])
+            fig.update_layout(title_x=0.5, template="plotly_white")
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("Yeniden suç işleme verisi bulunmamaktadır.")
+    with col2:
+        st.markdown(info_box("Bu pasta grafik, tahliye sonrası mahpusların yeniden suç işleme durumunu yüzdesel olarak gösterir. 'Tekrar Suç İşledi' dilimi öne çıkarılmıştır."))
 
     st.markdown("---")
 
-    # --- Demografik Dağılımlar & Yeniden Suç İşleme Oranları ---
-    st.subheader("👥 Demografik Dağılımlar & Yeniden Suç İşleme Oranları")
-
-    demo_cols = []
-    if "Gender" in df.columns:
-        demo_cols.append("Gender")
-    if "Education_Level" in df.columns:
-        demo_cols.append("Education_Level")
-
-    if demo_cols:
-        cols = st.columns(len(demo_cols))
-        for idx, col_name in enumerate(demo_cols):
-            with cols[idx]:
+    # --- Demografik Dağılımlar ve Yeniden Suç İşleme Oranları ---
+    st.subheader("👥 Demografik Dağılımlar ve Yeniden Suç İşleme Oranları")
+    demo_cols = ["Gender", "Education_Level"]
+    cols = st.columns(len(demo_cols))
+    for idx, col_name in enumerate(demo_cols):
+        with cols[idx]:
+            if col_name in df.columns:
                 counts = df[col_name].value_counts()
                 fig_bar = px.bar(
                     x=counts.index, y=counts.values,
-                    labels={"x": col_name.replace('_',' '), "y": "Kişi Sayısı"},
+                    labels={"x": col_name, "y": "Kişi Sayısı"},
                     title=f"{col_name.replace('_',' ')} Dağılımı",
                     color=counts.index,
-                    color_discrete_sequence=px.colors.qualitative.Safe,
+                    color_discrete_sequence=px.colors.qualitative.Safe
                 )
                 fig_bar.update_layout(showlegend=False, template="plotly_white", title_x=0.5)
                 st.plotly_chart(fig_bar, use_container_width=True)
@@ -215,23 +214,21 @@ def home_page(df):
                     recid_means = df.groupby(col_name)[recid_col].mean()
                     fig_recid = px.bar(
                         x=recid_means.index, y=recid_means.values,
-                        labels={"x": col_name.replace('_',' '), "y": "Ortalama Yeniden Suç İşleme Oranı"},
+                        labels={"x": col_name, "y": "Ortalama Yeniden Suç İşleme Oranı"},
                         title=f"{col_name.replace('_',' ')} Bazında Yeniden Suç İşleme Oranı",
                         color=recid_means.index,
-                        color_discrete_sequence=px.colors.qualitative.Safe,
+                        color_discrete_sequence=px.colors.qualitative.Safe
                     )
                     fig_recid.update_layout(showlegend=False, template="plotly_white", title_x=0.5, yaxis=dict(range=[0,1]))
                     st.plotly_chart(fig_recid, use_container_width=True)
-
-            st.markdown(info_box(f"{col_name.replace('_',' ')} dağılımı ve ilgili yeniden suç işleme oranları."))
-    else:
-        st.info("Demografik veri bulunmamaktadır.")
+            else:
+                st.info(f"{col_name} verisi bulunamadı.")
+            st.markdown(info_box(f"{col_name} dağılımı ve ilgili yeniden suç işleme oranları."))
 
     st.markdown("---")
 
-    # --- Özelliklerin Yeniden Suç İşleme ile Korelasyonu ---
-    st.subheader("📊 Özelliklerin Yeniden Suç İşleme ile Korelasyonu")
-
+    # --- Özelliklerin Recidivism ile Korelasyonu ---
+    st.subheader("📊 Özelliklerin Recidivism ile Korelasyonu")
     numeric_cols = df.select_dtypes(include=["number"]).columns.tolist()
     if recid_col in numeric_cols:
         numeric_cols.remove(recid_col)
@@ -288,4 +285,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
