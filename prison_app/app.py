@@ -292,8 +292,7 @@ def main():
     if page == "Ana Sayfa":
         home_page(df)
     elif page == "Tahmin Modeli":
-        # Tahmin sayfasını ayrı olarak pages/page_prediction.py'de kullanacağız
-        st.info("Tahmin sayfası için lütfen sol menüden 'Tahmin Modeli' sayfasına geçiniz veya 'pages/page_prediction.py' dosyasını açınız.")
+        st.info("Lütfen sol menüden 'Tahmin Modeli' sayfasına geçiniz.")  # Kullanıcıyı yönlendirmek için
     elif page == "Tavsiye ve Profil Analizi":
         placeholder_page("💡 Tavsiye ve Profil Analizi (Hazırlanıyor)")
     elif page == "Model Analizleri ve Harita":
