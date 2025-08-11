@@ -3,6 +3,11 @@ import pandas as pd
 from pathlib import Path
 import pickle
 
+st.set_page_config(
+    page_title="Tahmin Modeli",
+    page_icon="📊"
+)
+
 BASE = Path(__file__).parent.parent  # prison_app klasörü
 
 def load_model_files():
