@@ -4,8 +4,7 @@ import joblib
 import numpy as np
 import sys
 
-# Bu satır önemli, 'No module named Index' hatası için
-import pandas as pd
+# İşte bu satır kesinlikle olmalı, bu hata için:
 sys.modules['Index'] = pd.Index
 
 st.set_page_config(page_title="Tahmin Modeli", layout="wide")
@@ -38,7 +37,7 @@ def convert_age_range(age_str):
     elif "or older" in age_str:
         try:
             low = int(age_str.split()[0])
-            return low + 2  # Örnek ortalama
+            return low + 2
         except:
             return np.nan
     else:
@@ -56,43 +55,34 @@ def main():
 
     st.info("Model yüklendi. Lütfen tahmin için gerekli bilgileri doldurun.")
 
-    # Girdi için feature bazlı form alanları oluşturuyoruz
     input_data = {}
 
     for feat in feature_names:
-        # Yaş aralığı için özel input
         if feat == "Age_at_Release":
             options = ["18-22", "23-27", "28-32", "33-37", "38-42", "43-47", "48 or older"]
             input_data[feat] = st.selectbox(f"{feat} seçin", options)
-        # Boolean ise selectbox true/false olarak
         elif feat in bool_cols:
             val = st.selectbox(f"{feat} (bool)", ["False", "True"])
             input_data[feat] = True if val == "True" else False
-        # Kategorik ise, önceden kaydedilen unique değerlerden seçim
         elif feat in cat_features:
             options = cat_unique_values.get(feat, [])
             if options:
                 input_data[feat] = st.selectbox(f"{feat} seçin", options)
             else:
                 input_data[feat] = st.text_input(f"{feat} girin")
-        # Sayısal ise number_input
         else:
             input_data[feat] = st.number_input(f"{feat} girin", value=0)
 
     if st.button("Tahmin Et"):
-        # Ön işleme
         X_pred = pd.DataFrame([input_data], columns=feature_names)
 
-        # Yaş aralığını sayısala çevir
         if "Age_at_Release" in X_pred.columns:
             X_pred["Age_at_Release"] = X_pred["Age_at_Release"].apply(convert_age_range)
 
-        # Bool sütunları string'e çevir (model eğitiminde öyle yapmıştık)
         for col in bool_cols:
             if col in X_pred.columns:
                 X_pred[col] = X_pred[col].astype(str)
 
-        # Model tahmini
         try:
             pred_prob = model.predict_proba(X_pred)[:,1][0]
             pred_class = model.predict(X_pred)[0]
