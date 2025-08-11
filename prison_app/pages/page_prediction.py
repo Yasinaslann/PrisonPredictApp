@@ -1,73 +1,106 @@
 import streamlit as st
 import pandas as pd
+import joblib
 import numpy as np
-import dill
-import pickle
-from pathlib import Path
+import sys
 
-BASE = Path(__file__).parent
+# Bu satır önemli, 'No module named Index' hatası için
+import pandas as pd
+sys.modules['Index'] = pd.Index
 
-@st.cache_data(show_spinner=False)
-def load_pickle(path):
-    with open(path, "rb") as f:
-        return pickle.load(f)
+st.set_page_config(page_title="Tahmin Modeli", layout="wide")
 
-def load_model(path):
-    with open(path, "rb") as f:
-        return dill.load(f)
+@st.cache_data(show_spinner=True)
+def load_model_files():
+    try:
+        model = joblib.load("catboost_model.pkl")
+        bool_cols = joblib.load("bool_columns.pkl")
+        cat_features = joblib.load("cat_features.pkl")
+        feature_names = joblib.load("feature_names.pkl")
+        cat_unique_values = joblib.load("cat_unique_values.pkl")
+        return model, bool_cols, cat_features, feature_names, cat_unique_values
+    except Exception as e:
+        st.error(f"Model dosyaları yüklenirken hata oluştu: {e}")
+        return None, None, None, None, None
+
+def convert_age_range(age_str):
+    if pd.isna(age_str):
+        return np.nan
+    age_str = str(age_str).strip()
+    if "-" in age_str:
+        parts = age_str.split("-")
+        try:
+            low = int(parts[0])
+            high = int(parts[1])
+            return (low + high) / 2
+        except:
+            return np.nan
+    elif "or older" in age_str:
+        try:
+            low = int(age_str.split()[0])
+            return low + 2  # Örnek ortalama
+        except:
+            return np.nan
+    else:
+        try:
+            return float(age_str)
+        except:
+            return np.nan
 
 def main():
     st.title("📊 Tahmin Modeli")
 
-    # Dosya yolları
-    model_path = BASE / "catboost_model.pkl"
-    features_path = BASE / "feature_names.pkl"
-    bool_cols_path = BASE / "bool_columns.pkl"
-    cat_features_path = BASE / "cat_features.pkl"
-    cat_unique_path = BASE / "cat_unique_values.pkl"
-
-    # Model ve dosyaları yükle
-    try:
-        model = load_model(model_path)
-        feature_names = load_pickle(features_path)
-        bool_columns = load_pickle(bool_cols_path)
-        cat_features = load_pickle(cat_features_path)
-        cat_unique_values = load_pickle(cat_unique_path)
-    except Exception as e:
-        st.error(f"Model dosyaları yüklenirken hata oluştu: {e}")
+    model, bool_cols, cat_features, feature_names, cat_unique_values = load_model_files()
+    if model is None:
         return
 
-    st.info("Model başarıyla yüklendi. Tahmin için lütfen özellikleri girin.")
+    st.info("Model yüklendi. Lütfen tahmin için gerekli bilgileri doldurun.")
 
-    # Kullanıcıdan input al
+    # Girdi için feature bazlı form alanları oluşturuyoruz
     input_data = {}
 
-    for feature in feature_names:
-        if feature in bool_columns:
-            # Boolean input
-            val = st.checkbox(feature.replace("_", " "), value=False)
-            input_data[feature] = int(val)
-        elif feature in cat_features:
-            # Kategorik input
-            options = cat_unique_values.get(feature, [])
-            val = st.selectbox(feature.replace("_", " "), options)
-            input_data[feature] = val
+    for feat in feature_names:
+        # Yaş aralığı için özel input
+        if feat == "Age_at_Release":
+            options = ["18-22", "23-27", "28-32", "33-37", "38-42", "43-47", "48 or older"]
+            input_data[feat] = st.selectbox(f"{feat} seçin", options)
+        # Boolean ise selectbox true/false olarak
+        elif feat in bool_cols:
+            val = st.selectbox(f"{feat} (bool)", ["False", "True"])
+            input_data[feat] = True if val == "True" else False
+        # Kategorik ise, önceden kaydedilen unique değerlerden seçim
+        elif feat in cat_features:
+            options = cat_unique_values.get(feat, [])
+            if options:
+                input_data[feat] = st.selectbox(f"{feat} seçin", options)
+            else:
+                input_data[feat] = st.text_input(f"{feat} girin")
+        # Sayısal ise number_input
         else:
-            # Sayısal input
-            val = st.number_input(feature.replace("_", " "), value=0.0)
-            input_data[feature] = val
+            input_data[feat] = st.number_input(f"{feat} girin", value=0)
 
-    if st.button("Tahmin Yap"):
-        # DataFrame'e çevir
-        input_df = pd.DataFrame([input_data])
+    if st.button("Tahmin Et"):
+        # Ön işleme
+        X_pred = pd.DataFrame([input_data], columns=feature_names)
 
-        # Kategorik değişkenleri cat_features olarak belirt
+        # Yaş aralığını sayısala çevir
+        if "Age_at_Release" in X_pred.columns:
+            X_pred["Age_at_Release"] = X_pred["Age_at_Release"].apply(convert_age_range)
+
+        # Bool sütunları string'e çevir (model eğitiminde öyle yapmıştık)
+        for col in bool_cols:
+            if col in X_pred.columns:
+                X_pred[col] = X_pred[col].astype(str)
+
+        # Model tahmini
         try:
-            preds = model.predict_proba(input_df)
-            prob = preds[0][1]  # İkinci sınıfın olasılığı (recidivism = 1)
-            st.success(f"Mahpusun yeniden suç işleme olasılığı: %{prob*100:.2f}")
+            pred_prob = model.predict_proba(X_pred)[:,1][0]
+            pred_class = model.predict(X_pred)[0]
+
+            st.success(f"✅ Tahmin Sonucu: {'Tekrar Suç İşledi' if pred_class == 1 else 'Tekrar Suç İşlemedi'}")
+            st.info(f"📊 Yeniden Suç İşleme Olasılığı: %{pred_prob*100:.2f}")
         except Exception as e:
-            st.error(f"Tahmin yapılırken hata oluştu: {e}")
+            st.error(f"Tahmin sırasında hata oluştu: {e}")
 
 if __name__ == "__main__":
     main()
